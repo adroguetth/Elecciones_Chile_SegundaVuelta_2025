@@ -1,7 +1,7 @@
-"""Modificación para Segunda Vuelta Electoral 2025
+"""Segunda Vuelta Electoral 2025
 Web Scraper para Resultados Electorales Chilenos - Segunda Votación
 Autor: Alfonso Droguett
-Fecha: Noviembre 2025
+Fecha: Diciembre 2025
 Descripción: Extracción automática de resultados electorales por comuna desde SERVEL
 Repositorio: https://github.com/adroguetth/Elecciones_Chile_SegundaVuelta_2025
 """
