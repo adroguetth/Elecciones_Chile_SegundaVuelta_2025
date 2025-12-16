@@ -25,20 +25,6 @@ El proyecto está diseñado para producir **salidas gráficas de alta calidad**,
 
 ## 🧠 Arquitectura general del script
 
-El script `n2.py` está estructurado en **módulos lógicos claramente separados**, lo que facilita su mantenimiento pese a su tamaño (>3800 líneas):
-
-1. **Configuración e imports**
-2. **Constantes y diccionarios nacionales**
-3. **Escalas de color electorales**
-4. **Normalización de datos textuales**
-5. **Carga de datos geográficos (GeoJSON / SHP / fallback)**
-6. **Procesamiento de resultados electorales (CSV)**
-7. **Unión espacial-electoral (merge geográfico)**
-8. **Funciones de etiquetado cartográfico**
-9. **Cálculos estadísticos regionales**
-10. **Generación de mapas regionales completos**
-11. **Mapas especiales (islas y áreas metropolitanas)**
-12. **Exportación de imágenes finales**
 
 Cada bloque está **aislado funcionalmente** y documentado internamente en el script.
 
@@ -212,13 +198,12 @@ Está pensado para **datos reales, imperfectos y heterogéneos**.
 
 ## 📄 Licencia
 
-Definir según corresponda (MIT, GPL, CC, etc.).
 
 ---
 
 ## ✍️ Autoría
 
-Proyecto desarrollado por **[Autor / Organización]**.
+Proyecto desarrollado por **Alfonso Droguett**.
 
 El volumen y nivel de detalle del script reflejan **horas de trabajo y validación empírica**, orientado a producir resultados confiables y visualmente rigurosos.
 
