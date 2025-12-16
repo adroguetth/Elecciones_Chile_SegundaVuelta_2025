@@ -1,4 +1,4 @@
-# 🗺️ Mapa Electoral Chile 2025 – Segunda Vuelta
+# 🗺️ Generador de Mapas Electorales – Segunda Vuelta Chile 2025
 
 ## Descripción general
 
