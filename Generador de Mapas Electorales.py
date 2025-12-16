@@ -1,4 +1,27 @@
 #!/usr/bin/env python3
+"""
+Generador de Mapas Electorales - Segunda Vuelta Presidencial Chile 2025.
+
+Módulo principal para generar mapas electorales detallados de Chile,
+mostrando resultados por comuna de la segunda vuelta presidencial 2025
+(Jara vs Kast). Incluye mapas regionales, áreas metropolitanas,
+reportes estadísticos y visualizaciones nacionales.
+
+Características principales:
+- Generación de mapas por región con nombres de comunas
+- Mapas de áreas metropolitanas (Gran Santiago, Valparaíso, Concepción)
+- Reportes nacionales y regionales con estadísticas
+- Visualización de diferencia de votos con escala de colores personalizada
+- Procesamiento de datos electorales desde archivos CSV
+- Integración con datos geográficos de múltiples fuentes
+
+Autor: Alfonso Droguett
+Fecha: 2025
+"""
+
+# ============================================================================
+# IMPORTS Y CONFIGURACIÓN
+# ============================================================================
 
 import geopandas as gpd
 import pandas as pd
@@ -23,12 +46,18 @@ import urllib.request
 import tempfile
 import shutil
 
+# Configuración de logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 warnings.filterwarnings('ignore')
 
+# ============================================================================
+# CONSTANTES Y CONFIGURACIONES
+# ============================================================================
+
+# Mapeo de números de región a nombres
 REGIONES_ANTIGUAS_NUM = {
     1: "Tarapacá",
     2: "Antofagasta",
@@ -48,6 +77,7 @@ REGIONES_ANTIGUAS_NUM = {
     16: "Ñuble"
 }
 
+# Nombres completos de regiones para títulos
 REGIONES_NOMBRES_TITULOS = {
     1: "Región de Tarapacá",
     2: "Región de Antofagasta",
@@ -67,6 +97,7 @@ REGIONES_NOMBRES_TITULOS = {
     16: "Región de Ñuble"
 }
 
+# Tamaños de fuente para etiquetas de comunas por región
 TAMANOS_FUENTE_REGION = {
     1: 9,
     2: 9,
@@ -86,6 +117,7 @@ TAMANOS_FUENTE_REGION = {
     16: 9
 }
 
+# Tamaños de fuente para áreas metropolitanas
 TAMANOS_FUENTE_AREAS_METROPOLITANAS = {
     'gran_valparaiso': 9,
     'gran_concepcion': 9,
@@ -95,6 +127,7 @@ TAMANOS_FUENTE_AREAS_METROPOLITANAS = {
     'region_metropolitana_numeros': 9
 }
 
+# Mapeo de nombres de región en CSV a números de región
 NOMBRES_CSV_A_NUM = {
     "Metropolitana": 13,
     "Libertador": 6,
@@ -123,6 +156,7 @@ NOMBRES_CSV_A_NUM = {
     "Los Rios": 14
 }
 
+# Paleta de colores para la diferencia entre candidatos
 COLORES_BALOTAJE = [
     '#0F2D5C',
     '#1A3D7C',
@@ -139,10 +173,20 @@ COLORES_BALOTAJE = [
     '#B91C1C',
 ]
 
+# Mapa de colores continuo para la escala
 cmap_continuo = LinearSegmentedColormap.from_list('jara_kast_divergente', COLORES_BALOTAJE, N=256)
 
 
 def asignar_color_diferencia(diferencia):
+    """
+    Asigna color hexadecimal según la diferencia porcentual entre candidatos.
+
+    Args:
+        diferencia (float): Diferencia porcentual (Jara% - Kast%).
+
+    Returns:
+        str: Código hexadecimal del color asignado.
+    """
     if pd.isna(diferencia):
         return "#D3D3D3"
 
@@ -178,25 +222,33 @@ def asignar_color_diferencia(diferencia):
             return "#8BB2F0"
 
 
+# ============================================================================
+# DEFINICIONES DE ÁREAS METROPOLITANAS Y COMUNAS ESPECIALES
+# ============================================================================
+
+# Comunas que forman parte del Gran Santiago
 CONURBACION_SANTIAGO = [
     "Cerrillos", "Cerro Navia", "Conchalí", "El Bosque", "Estación Central",
     "Huechuraba", "Independencia", "La Cisterna", "La Florida", "La Granja",
-    "La Pintana", "Providencia", "Las Condes", "La Reina", "Lo Espejo",
+    "Providencia", "Las Condes", "La Reina", "Lo Espejo",
     "Lo Prado", "Macul", "Maipú", "Ñuñoa", "Padre Hurtado",
     "Pedro Aguirre Cerda", "Peñalolén", "Vitacura", "Pudahuel", "Puente Alto",
     "Quilicura", "Quinta Normal", "Recoleta", "Renca", "San Bernardo",
     "San Joaquín", "San Miguel", "San Ramón", "Santiago", "Lo Barnechea"
 ]
 
+# Comunas que forman parte del Gran Valparaíso
 GRAN_VALPARAISO = [
     "Valparaíso", "Viña del Mar", "Concón", "Quilpué", "Villa Alemana"
 ]
 
+# Comunas que forman parte del Gran Concepción
 GRAN_CONCEPCION = [
     "Concepción", "Coronel", "Chiguayante", "Hualpén", "Hualqui", "Lota",
     "Penco", "San Pedro de la Paz", "Talcahuano", "Tomé"
 ]
 
+# Mapeo de comunas del Gran Santiago a números (para etiquetas pequeñas)
 MAQUEO_COMUNAS_NUMEROS = {
     "Conchalí": "1",
     "Recoleta": "2",
@@ -217,6 +269,7 @@ MAQUEO_COMUNAS_NUMEROS = {
     "La Granja": "17"
 }
 
+# Mapeo de comunas de Región Metropolitana a números
 COMUNAS_NUMEROS_RM = {
     "Quilicura": "1",
     "Huechuraba": "2",
@@ -232,6 +285,7 @@ COMUNAS_NUMEROS_RM = {
     "Isla de Maipo": "12"
 }
 
+# Comunas de RM que solo llevan etiqueta (sin número)
 COMUNAS_ETIQUETAS_RM = [
     "Tiltil",
     "Colina",
@@ -248,6 +302,7 @@ COMUNAS_ETIQUETAS_RM = [
     "San José de Maipo"
 ]
 
+# Mapeo de comunas de Región de Valparaíso a números
 COMUNAS_NUMEROS_REGION_5 = {
     "Concón": "1",
     "Viña del Mar": "2",
@@ -263,6 +318,7 @@ COMUNAS_NUMEROS_REGION_5 = {
     "El Tabo": "12"
 }
 
+# Mapeo de comunas de Región de O'Higgins a números
 COMUNAS_NUMEROS_REGION_6 = {
     "Codegua": "1",
     "Graneros": "2",
@@ -274,6 +330,7 @@ COMUNAS_NUMEROS_REGION_6 = {
     "Pichidegua": "8"
 }
 
+# Mapeo de comunas de Región del Maule a números
 COMUNAS_NUMEROS_REGION_7 = {
     "Licantén": "1",
     "Rauco": "2",
@@ -283,6 +340,7 @@ COMUNAS_NUMEROS_REGION_7 = {
     "Yerbas Buenas": "6"
 }
 
+# Mapeo de comunas de Región del Biobío a números
 COMUNAS_NUMEROS_REGION_8 = {
     "Concepción": "1",
     "Talcahuano": "2",
@@ -298,6 +356,7 @@ COMUNAS_NUMEROS_REGION_8 = {
     "Contulmo": "12"
 }
 
+# Mapeo de comunas de Región de la Araucanía a números
 COMUNAS_NUMEROS_REGION_9 = {
     "Renaico": "1",
     "Ercilla": "2",
@@ -311,6 +370,7 @@ COMUNAS_NUMEROS_REGION_9 = {
     "Pitrufquén": "10"
 }
 
+# Mapeo de comunas de Región de Los Lagos a números
 COMUNAS_NUMEROS_REGION_10 = {
     "San Juan de la Costa": "1",
     "Río Negro": "2",
@@ -326,12 +386,14 @@ COMUNAS_NUMEROS_REGION_10 = {
     "Queilén": "12"
 }
 
+# Mapeo de comunas de Región de Magallanes a números
 COMUNAS_NUMEROS_REGION_12 = {
     "Torres del Paine": "1",
     "Laguna Blanca": "2",
     "San Gregorio": "3"
 }
 
+# Mapeo de comunas de Región de Ñuble a números
 COMUNAS_NUMEROS_REGION_16 = {
     "Ñiquén": "1",
     "Cobquecura": "2",
@@ -341,16 +403,34 @@ COMUNAS_NUMEROS_REGION_16 = {
 }
 
 
+# ============================================================================
+# FUNCIONES DE UTILIDAD Y PREPROCESAMIENTO
+# ============================================================================
+
 def normalizar_nombre(nombre):
+    """
+    Normaliza nombres de comunas para comparación.
+
+    Elimina acentos, caracteres especiales, prefijos comunes y estandariza
+    variaciones ortográficas.
+
+    Args:
+        nombre (str): Nombre de comuna a normalizar.
+
+    Returns:
+        str: Nombre normalizado en minúsculas y sin caracteres especiales.
+    """
     if pd.isna(nombre):
         return ""
 
     nombre_str = str(nombre).lower()
 
+    # Correcciones específicas para nombres problemáticos
     nombre_str = nombre_str.replace("llay-llay", "llaillay")
     nombre_str = nombre_str.replace("cabo de hornos(ex-navarino)", "cabo de hornos")
     nombre_str = nombre_str.replace("trehuaco", "treguaco")
 
+    # Tabla de reemplazos para normalización
     reemplazos = {
         'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
         'ñ': 'n', 'ü': 'u',
@@ -367,6 +447,12 @@ def normalizar_nombre(nombre):
 
 
 def cargar_gran_santiago_geojson():
+    """
+    Carga GeoJSON especializado para el Gran Santiago desde GitHub.
+
+    Returns:
+        GeoDataFrame or None: Datos geográficos del Gran Santiago o None si falla.
+    """
     print("\n🗺️ CARGANDO GEOJSON ESPECÍFICO DE GRAN SANTIAGO...")
 
     url = "https://raw.githubusercontent.com/robsalasco/precenso_2016_geojson_chile/master/Extras/GRAN_SANTIAGO.geojson"
@@ -379,6 +465,7 @@ def cargar_gran_santiago_geojson():
 
         print(f" ✓ GeoJSON de Gran Santiago cargado: {len(gdf_gran_santiago)} elementos")
 
+        # Buscar columna que contiene nombres de comunas
         posibles_columnas_comuna = ['NOM_COM', 'Comuna', 'nombre', 'NOMBRE', 'comuna', 'NOMCOM']
         columna_comuna = None
 
@@ -407,8 +494,21 @@ def cargar_gran_santiago_geojson():
 
 
 def cargar_datos_geograficos():
+    """
+    Carga datos geográficos de comunas chilenas desde múltiples fuentes.
+
+    Intenta cargar archivos locales primero, luego descarga desde GitHub.
+    Si todo falla, genera datos básicos de emergencia.
+
+    Returns:
+        GeoDataFrame: Datos geográficos de comunas chilenas.
+
+    Raises:
+        ValueError: Si los datos geográficos son inválidos.
+    """
     print("\n🗺️ CARGANDO DATOS GEOGRÁFICOS...")
 
+    # Lista de archivos locales comunes
     archivos_locales = [
         'comunas_chile.geojson',
         'comunas.geojson',
@@ -418,6 +518,7 @@ def cargar_datos_geograficos():
         'comunas.json'
     ]
 
+    # Intentar cargar archivos locales
     for archivo in archivos_locales:
         if os.path.exists(archivo):
             try:
@@ -431,6 +532,7 @@ def cargar_datos_geograficos():
             except Exception as e:
                 print(f" ✗ Error cargando {archivo}: {e}")
 
+    # Si no hay locales, descargar por región desde GitHub
     print(" No se encontraron archivos locales. Intentando descargar por región desde caracena/chile-geojson...")
     gdfs = []
     for i in range(1, 17):
@@ -450,6 +552,7 @@ def cargar_datos_geograficos():
         except Exception as e:
             print(f" ✗ Error descargando región {i} desde {url}: {e}")
 
+    # Concatenar regiones descargadas
     if gdfs:
         gdf = pd.concat(gdfs, ignore_index=True)
         gdf = gpd.GeoDataFrame(gdf, crs='EPSG:4326')
@@ -461,16 +564,25 @@ def cargar_datos_geograficos():
             raise ValueError("Datos geográficos inválidos: sin geometrías válidas.")
         return gdf
 
+    # Si todas las descargas fallaron, crear datos básicos
     print(" ⚠ Todas las descargas fallaron. Usando datos básicos (formas cuadradas)")
     return crear_datos_basicos()
 
 
 def crear_datos_basicos():
+    """
+    Crea datos geográficos básicos de emergencia cuando no hay datos reales.
+
+    Genera polígonos rectangulares simulados para cada región y comuna.
+
+    Returns:
+        GeoDataFrame: Datos geográficos simulados.
+    """
     print(" Creando datos básicos de emergencia...")
 
     from shapely.geometry import Polygon
 
-    regiones_data = []
+    # Límites aproximados por región
     region_bounds = {
         1: {"minx": -70.5, "miny": -20.5, "maxx": -68.5, "maxy": -17.5},
         2: {"minx": -71.5, "miny": -25.5, "maxx": -67.5, "maxy": -21.5},
@@ -490,6 +602,7 @@ def crear_datos_basicos():
         16: {"minx": -73.5, "miny": -37.5, "maxx": -71.5, "maxy": -35.5},
     }
 
+    # Nombres de comunas por región
     nombres_comunas = {
         1: ["Iquique", "Alto Hospicio", "Pozo Almonte", "Camiña", "Colchane", "Huara", "Pica"],
         2: ["Antofagasta", "Calama", "Tocopilla", "María Elena", "Mejillones", "Sierra Gorda", "Taltal"],
@@ -520,6 +633,7 @@ def crear_datos_basicos():
              "Treguaco", "Coelemu"]
     }
 
+    regiones_data = []
     for region_num in range(1, 17):
         bounds = region_bounds.get(region_num)
         if not bounds:
@@ -529,6 +643,7 @@ def crear_datos_basicos():
         num_comunas = len(nombres)
         width = (bounds["maxx"] - bounds["minx"]) / num_comunas if num_comunas > 0 else 1
 
+        # Crear rectángulo para cada comuna
         for i, nombre in enumerate(nombres):
             minx = bounds["minx"] + i * width
             maxx = minx + width
@@ -558,12 +673,26 @@ def crear_datos_basicos():
 
 
 def procesar_csv(csv_path):
+    """
+    Procesa archivo CSV con datos electorales.
+
+    Args:
+        csv_path (str): Ruta al archivo CSV.
+
+    Returns:
+        DataFrame: Datos electorales procesados.
+
+    Raises:
+        FileNotFoundError: Si el archivo no existe.
+        ValueError: Si faltan columnas requeridas.
+    """
     print(f"\n📊 PROCESANDO DATOS ELECTORALES...")
     print(f" Cargando CSV: {csv_path}")
 
     if not os.path.exists(csv_path):
         raise FileNotFoundError(f"Archivo no encontrado: {csv_path}")
 
+    # Intentar diferentes codificaciones
     codificaciones = ['utf-8-sig', 'latin-1', 'iso-8859-1', 'cp1252', 'utf-8']
 
     for encoding in codificaciones:
@@ -580,8 +709,10 @@ def procesar_csv(csv_path):
     print(f" Filas: {len(df)}")
     print(f" Columnas: {list(df.columns)}")
 
+    # Normalizar nombres de columnas
     df.columns = [str(col).strip().lower() for col in df.columns]
 
+    # Mapeo de nombres de columnas alternativos a estandarizados
     mapeo_columnas = {
         'comuna': ['comuna', 'nombre comuna', 'comuna_nombre', 'nombre_comuna'],
         'region': ['region', 'región', 'nombre_region', 'region_nombre'],
@@ -601,16 +732,19 @@ def procesar_csv(csv_path):
                 print(f" ✓ Renombrada '{alt}' -> '{col_estandar}'")
                 break
 
+    # Verificar columnas requeridas
     columnas_requeridas = ['comuna', 'jara_pct', 'kast_pct']
     for col in columnas_requeridas:
         if col not in df.columns:
             raise ValueError(f"Columna requerida no encontrada: '{col}'")
 
+    # Limpiar datos de texto
     df['comuna'] = df['comuna'].astype(str).str.strip()
 
     if 'region' in df.columns:
         df['region'] = df['region'].astype(str).str.strip()
 
+    # Convertir columnas numéricas
     columnas_numericas = ['jara_pct', 'kast_pct', 'jara_votos', 'kast_votos',
                           'blanco_votos', 'nulo_votos', 'emitidos_votos']
 
@@ -619,6 +753,7 @@ def procesar_csv(csv_path):
             df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
+    # Calcular votos si solo hay porcentajes
     if 'jara_votos' not in df.columns and 'jara_pct' in df.columns and 'emitidos_votos' in df.columns:
         print(" Calculando votos de Jara a partir de porcentajes...")
         df['jara_votos'] = (df['jara_pct'] / 100) * df['emitidos_votos']
@@ -627,27 +762,34 @@ def procesar_csv(csv_path):
         print(" Calculando votos de Kast a partir de porcentajes...")
         df['kast_votos'] = (df['kast_pct'] / 100) * df['emitidos_votos']
 
+    # Calcular diferencia porcentual
     df['diferencia_pct'] = df['jara_pct'] - df['kast_pct']
 
+    # Calcular votos válidos si hay datos suficientes
     if all(col in df.columns for col in ['emitidos_votos', 'blanco_votos', 'nulo_votos']):
         print(" Calculando votos válidos...")
         df['validos_votos'] = df['emitidos_votos'] - df['blanco_votos'] - df['nulo_votos']
 
+    # Validar porcentajes (deben estar entre 0 y 100)
     invalid_rows = df[(df['jara_pct'] < 0) | (df['jara_pct'] > 100) | (df['kast_pct'] < 0) | (df['kast_pct'] > 100)]
     if not invalid_rows.empty:
         print(f" ⚠ Filas con porcentajes inválidos (>100 o <0): {len(invalid_rows)}")
         df.loc[invalid_rows.index, ['jara_pct', 'kast_pct']] = np.nan
 
+    # Función auxiliar para mapear nombres de región a números
     def mapear_region(nombre):
+        """Mapea nombre textual de región a número."""
         if pd.isna(nombre):
             return None
 
         nombre_str = str(nombre).strip()
 
+        # Búsqueda exacta
         for region_csv, num in NOMBRES_CSV_A_NUM.items():
             if nombre_str.lower() == region_csv.lower():
                 return num
 
+        # Búsqueda parcial
         for region_csv, num in NOMBRES_CSV_A_NUM.items():
             if region_csv.lower() in nombre_str.lower():
                 return num
@@ -655,6 +797,7 @@ def procesar_csv(csv_path):
         print(f" ⚠ No se pudo mapear región: '{nombre_str}'")
         return None
 
+    # Mapear regiones del CSV
     if 'region' in df.columns:
         print("\n Mapeando regiones del CSV a números:")
         regiones_unicas = df['region'].unique()
@@ -666,8 +809,10 @@ def procesar_csv(csv_path):
     else:
         df['REGION_NUM'] = None
 
+    # Normalizar nombres de comunas para matching
     df['NOM_COM_NORM'] = df['comuna'].apply(normalizar_nombre)
 
+    # Estadísticas del CSV
     comunas_con_datos = df['diferencia_pct'].notna().sum()
     dif_promedio = df['diferencia_pct'].mean() if comunas_con_datos > 0 else 0
 
@@ -684,19 +829,33 @@ def procesar_csv(csv_path):
 
 
 def unir_datos(comunas, df_electoral):
+    """
+    Une datos geográficos con datos electorales.
+
+    Args:
+        comunas (GeoDataFrame): Datos geográficos de comunas.
+        df_electoral (DataFrame): Datos electorales procesados.
+
+    Returns:
+        GeoDataFrame: Datos combinados con geometrías y resultados electorales.
+    """
     print("\n🔄 UNIENDO DATOS GEOGRÁFICOS Y ELECTORALES...")
 
+    # Asegurar columna REGION_NUM en datos geográficos
     if 'REGION_NUM' not in comunas.columns and 'REGION' in comunas.columns:
         comunas['REGION_NUM'] = comunas['REGION']
 
+    # Normalizar nombres de comunas en ambos datasets
     comunas['NOM_COM_NORM'] = comunas['NOM_COM'].apply(normalizar_nombre)
 
+    # Mostrar ejemplos de normalización para debugging
     print(" 🔍 Ejemplos de normalización (geográficas vs electorales):")
     min_samples = min(5, len(comunas), len(df_electoral))
     for i in range(min_samples):
         print(f" Geo: '{comunas.iloc[i]['NOM_COM']}' -> '{comunas.iloc[i]['NOM_COM_NORM']}'")
         print(f" CSV: '{df_electoral.iloc[i]['comuna']}' -> '{df_electoral.iloc[i]['NOM_COM_NORM']}'")
 
+    # Realizar merge por nombre normalizado y región
     print(" Realizando merge...")
     mapa_data = comunas.merge(
         df_electoral,
@@ -705,6 +864,7 @@ def unir_datos(comunas, df_electoral):
         how='left'
     )
 
+    # Si no hay REGION_NUM, intentar merge solo por nombre
     if 'REGION_NUM' not in mapa_data.columns:
         mapa_data = comunas.merge(
             df_electoral,
@@ -713,6 +873,7 @@ def unir_datos(comunas, df_electoral):
             how='left'
         )
 
+    # Gestionar columnas de región duplicadas
     if 'REGION_NUM_x' in mapa_data.columns:
         mapa_data['REGION_NUM'] = mapa_data['REGION_NUM_x']
     elif 'REGION_NUM_y' in mapa_data.columns:
@@ -720,6 +881,7 @@ def unir_datos(comunas, df_electoral):
     elif 'REGION_NUM' not in mapa_data.columns and 'REGION' in mapa_data.columns:
         mapa_data['REGION_NUM'] = mapa_data['REGION']
 
+    # Si aún no hay REGION_NUM, intentar extraer de código de comuna
     if 'REGION_NUM' not in mapa_data.columns and 'COD_COM' in mapa_data.columns:
         def extraer_region_de_codigo(codigo):
             try:
@@ -731,16 +893,20 @@ def unir_datos(comunas, df_electoral):
 
         mapa_data['REGION_NUM'] = mapa_data['COD_COM'].apply(extraer_region_de_codigo)
 
+    # Si todo falla, asignar Región Metropolitana como predeterminada
     if 'REGION_NUM' not in mapa_data.columns or mapa_data['REGION_NUM'].isna().all():
         mapa_data['REGION_NUM'] = 13
 
+    # Asegurar tipo numérico
     mapa_data['REGION_NUM'] = pd.to_numeric(mapa_data['REGION_NUM'], errors='coerce').fillna(13).astype(int)
 
+    # Identificar comunas sin datos
     sin_datos = mapa_data[mapa_data['diferencia_pct'].isna()]['NOM_COM'].tolist()
     if sin_datos:
         print(
             f" ⚠ Comunas sin datos electorales (posibles mismatches): {len(sin_datos)} - Ejemplos: {sin_datos[:5]}...")
 
+    # Estadísticas de la unión
     comunas_con_datos = mapa_data['diferencia_pct'].notna().sum() if 'diferencia_pct' in mapa_data.columns else 0
     total_comunas = len(mapa_data)
 
@@ -749,6 +915,7 @@ def unir_datos(comunas, df_electoral):
     print(f" Total comunas electorales: {len(df_electoral)}")
     print(f" Comunas con datos después del merge: {comunas_con_datos} ({comunas_con_datos / total_comunas * 100:.1f}%)")
 
+    # Estadísticas de resultados si hay datos
     if comunas_con_datos > 0 and 'diferencia_pct' in mapa_data.columns:
         jara_gana = (mapa_data['diferencia_pct'] > 0).sum()
         kast_gana = (mapa_data['diferencia_pct'] < 0).sum()
@@ -761,7 +928,20 @@ def unir_datos(comunas, df_electoral):
     return mapa_data
 
 
+# ============================================================================
+# FUNCIONES PARA AGREGAR ETIQUETAS A MAPAS
+# ============================================================================
+
 def agregar_nombres_comunas(ax, region_data, fontsize=7, exclude_comunas=None):
+    """
+    Agrega nombres de comunas a un mapa.
+
+    Args:
+        ax (matplotlib.axes.Axes): Ejes donde dibujar.
+        region_data (GeoDataFrame): Datos de la región.
+        fontsize (int): Tamaño de fuente para etiquetas.
+        exclude_comunas (list): Lista de nombres de comunas a excluir.
+    """
     print(f"  Agregando nombres de comunas (tamaño fuente: {fontsize})...")
 
     if exclude_comunas is None:
@@ -779,6 +959,7 @@ def agregar_nombres_comunas(ax, region_data, fontsize=7, exclude_comunas=None):
 
                 nombre_comuna = comuna_nombre
 
+                # Acortar nombres largos
                 max_length = 20 if fontsize <= 7 else 25
 
                 if len(nombre_comuna) > max_length:
@@ -791,6 +972,7 @@ def agregar_nombres_comunas(ax, region_data, fontsize=7, exclude_comunas=None):
                     elif "General " in nombre_comuna:
                         nombre_comuna = nombre_comuna.replace("General ", "Gral. ")
 
+                # Determinar color de texto basado en color de fondo
                 if 'color' in row:
                     color_hex = row['color']
                     if color_hex.startswith('#'):
@@ -808,6 +990,7 @@ def agregar_nombres_comunas(ax, region_data, fontsize=7, exclude_comunas=None):
 
                 bbox_alpha = 0.6 if fontsize <= 7 else 0.7
 
+                # Agregar texto con fondo semitransparente
                 ax.text(point.x, point.y, nombre_comuna,
                         fontsize=fontsize,
                         ha='center', va='center',
@@ -825,6 +1008,15 @@ def agregar_nombres_comunas(ax, region_data, fontsize=7, exclude_comunas=None):
 
 
 def agregar_etiquetas_region_metropolitana(ax, region_data):
+    """
+    Agrega etiquetas especiales para comunas de la Región Metropolitana.
+
+    Usa números para comunas pequeñas y nombres para otras.
+
+    Args:
+        ax (matplotlib.axes.Axes): Ejes donde dibujar.
+        region_data (GeoDataFrame): Datos de la Región Metropolitana.
+    """
     print(f"  Agregando etiquetas especiales para Región Metropolitana...")
 
     nombres_agregados = 0
@@ -835,6 +1027,7 @@ def agregar_etiquetas_region_metropolitana(ax, region_data):
 
                 point = row['geometry'].representative_point()
 
+                # Determinar tipo de etiqueta (número o texto)
                 if comuna_nombre in COMUNAS_NUMEROS_RM:
                     etiqueta = COMUNAS_NUMEROS_RM[comuna_nombre]
                     fontsize = TAMANOS_FUENTE_AREAS_METROPOLITANAS['region_metropolitana_numeros']
@@ -848,6 +1041,7 @@ def agregar_etiquetas_region_metropolitana(ax, region_data):
                 else:
                     continue
 
+                # Determinar color de texto
                 if 'color' in row:
                     color_hex = row['color']
                     if color_hex.startswith('#'):
@@ -861,6 +1055,7 @@ def agregar_etiquetas_region_metropolitana(ax, region_data):
                 else:
                     text_color = 'black'
 
+                # Ajustes de posición para comunas específicas
                 offset_x = 0
                 offset_y = 0
 
@@ -879,6 +1074,7 @@ def agregar_etiquetas_region_metropolitana(ax, region_data):
                 elif comuna_nombre == "San José de Maipo":
                     offset_x = -0.01
 
+                # Agregar etiqueta
                 ax.text(point.x + offset_x, point.y + offset_y, etiqueta,
                         fontsize=fontsize,
                         ha='center', va='center',
@@ -896,6 +1092,14 @@ def agregar_etiquetas_region_metropolitana(ax, region_data):
 
 
 def agregar_etiquetas_gran_santiago(ax, region_data, usar_numeros=True):
+    """
+    Agrega etiquetas especiales para el Gran Santiago.
+
+    Args:
+        ax (matplotlib.axes.Axes): Ejes donde dibujar.
+        region_data (GeoDataFrame): Datos del Gran Santiago.
+        usar_numeros (bool): Si True, usa números en lugar de nombres.
+    """
     print(f"  Agregando etiquetas especiales para Gran Santiago...")
 
     nombres_agregados = 0
@@ -906,6 +1110,7 @@ def agregar_etiquetas_gran_santiago(ax, region_data, usar_numeros=True):
 
                 point = row['geometry'].representative_point()
 
+                # Determinar etiqueta (número o texto)
                 if usar_numeros and comuna_nombre in MAQUEO_COMUNAS_NUMEROS:
                     etiqueta = MAQUEO_COMUNAS_NUMEROS[comuna_nombre]
                     fontsize = 15
@@ -915,6 +1120,7 @@ def agregar_etiquetas_gran_santiago(ax, region_data, usar_numeros=True):
                         etiqueta = etiqueta[:12] + '...'
                     fontsize = 15
 
+                # Determinar color de texto
                 if 'color' in row:
                     color_hex = row['color']
                     if color_hex.startswith('#'):
@@ -928,6 +1134,7 @@ def agregar_etiquetas_gran_santiago(ax, region_data, usar_numeros=True):
                 else:
                     text_color = 'black'
 
+                # Agregar etiqueta
                 ax.text(point.x, point.y, etiqueta,
                         fontsize=fontsize,
                         ha='center', va='center',
@@ -945,6 +1152,13 @@ def agregar_etiquetas_gran_santiago(ax, region_data, usar_numeros=True):
 
 
 def agregar_etiquetas_region_5_valparaiso(ax, region_data):
+    """
+    Agrega etiquetas especiales para comunas de la Región de Valparaíso.
+
+    Args:
+        ax (matplotlib.axes.Axes): Ejes donde dibujar.
+        region_data (GeoDataFrame): Datos de la Región de Valparaíso.
+    """
     print(f"  Agregando etiquetas especiales para Región 5 (Valparaíso)...")
 
     nombres_agregados = 0
@@ -955,6 +1169,7 @@ def agregar_etiquetas_region_5_valparaiso(ax, region_data):
 
                 point = row['geometry'].representative_point()
 
+                # Determinar tipo de etiqueta
                 if comuna_nombre in COMUNAS_NUMEROS_REGION_5:
                     etiqueta = COMUNAS_NUMEROS_REGION_5[comuna_nombre]
                     fontsize = 9
@@ -966,6 +1181,7 @@ def agregar_etiquetas_region_5_valparaiso(ax, region_data):
                     fontsize = 9
                     fontweight = 'normal'
 
+                # Determinar color de texto
                 if 'color' in row:
                     color_hex = row['color']
                     if color_hex.startswith('#'):
@@ -979,10 +1195,8 @@ def agregar_etiquetas_region_5_valparaiso(ax, region_data):
                 else:
                     text_color = 'black'
 
-                offset_x = 0
-                offset_y = 0
-
-                ax.text(point.x + offset_x, point.y + offset_y, etiqueta,
+                # Agregar etiqueta
+                ax.text(point.x, point.y, etiqueta,
                         fontsize=fontsize,
                         ha='center', va='center',
                         color=text_color,
@@ -995,10 +1209,17 @@ def agregar_etiquetas_region_5_valparaiso(ax, region_data):
         except Exception as e:
             continue
 
-    print(f"  ✓ Etiquetas especiales para Región 5 (Valparaíso) agregadas: {nombres_agregados} (tamaño aumentado)")
+    print(f"  ✓ Etiquetas especiales para Región 5 (Valparaíso) agregadas: {nombres_agregados}")
 
 
 def agregar_etiquetas_region_6_ohiggins(ax, region_data):
+    """
+    Agrega etiquetas especiales para comunas de la Región de O'Higgins.
+
+    Args:
+        ax (matplotlib.axes.Axes): Ejes donde dibujar.
+        region_data (GeoDataFrame): Datos de la Región de O'Higgins.
+    """
     print(f"  Agregando etiquetas especiales para Región 6 (O'Higgins)...")
 
     nombres_agregados = 0
@@ -1009,6 +1230,7 @@ def agregar_etiquetas_region_6_ohiggins(ax, region_data):
 
                 point = row['geometry'].representative_point()
 
+                # Determinar tipo de etiqueta
                 if comuna_nombre in COMUNAS_NUMEROS_REGION_6:
                     etiqueta = COMUNAS_NUMEROS_REGION_6[comuna_nombre]
                     fontsize = 9
@@ -1020,6 +1242,7 @@ def agregar_etiquetas_region_6_ohiggins(ax, region_data):
                     fontsize = 9
                     fontweight = 'normal'
 
+                # Determinar color de texto
                 if 'color' in row:
                     color_hex = row['color']
                     if color_hex.startswith('#'):
@@ -1033,10 +1256,8 @@ def agregar_etiquetas_region_6_ohiggins(ax, region_data):
                 else:
                     text_color = 'black'
 
-                offset_x = 0
-                offset_y = 0
-
-                ax.text(point.x + offset_x, point.y + offset_y, etiqueta,
+                # Agregar etiqueta
+                ax.text(point.x, point.y, etiqueta,
                         fontsize=fontsize,
                         ha='center', va='center',
                         color=text_color,
@@ -1053,6 +1274,13 @@ def agregar_etiquetas_region_6_ohiggins(ax, region_data):
 
 
 def agregar_etiquetas_region_7_maule(ax, region_data):
+    """
+    Agrega etiquetas especiales para comunas de la Región del Maule.
+
+    Args:
+        ax (matplotlib.axes.Axes): Ejes donde dibujar.
+        region_data (GeoDataFrame): Datos de la Región del Maule.
+    """
     print(f"  Agregando etiquetas especiales para Región 7 (Maule)...")
 
     nombres_agregados = 0
@@ -1063,6 +1291,7 @@ def agregar_etiquetas_region_7_maule(ax, region_data):
 
                 point = row['geometry'].representative_point()
 
+                # Determinar tipo de etiqueta
                 if comuna_nombre in COMUNAS_NUMEROS_REGION_7:
                     etiqueta = COMUNAS_NUMEROS_REGION_7[comuna_nombre]
                     fontsize = 9
@@ -1074,6 +1303,7 @@ def agregar_etiquetas_region_7_maule(ax, region_data):
                     fontsize = 9
                     fontweight = 'normal'
 
+                # Determinar color de texto
                 if 'color' in row:
                     color_hex = row['color']
                     if color_hex.startswith('#'):
@@ -1087,10 +1317,8 @@ def agregar_etiquetas_region_7_maule(ax, region_data):
                 else:
                     text_color = 'black'
 
-                offset_x = 0
-                offset_y = 0
-
-                ax.text(point.x + offset_x, point.y + offset_y, etiqueta,
+                # Agregar etiqueta
+                ax.text(point.x, point.y, etiqueta,
                         fontsize=fontsize,
                         ha='center', va='center',
                         color=text_color,
@@ -1107,6 +1335,13 @@ def agregar_etiquetas_region_7_maule(ax, region_data):
 
 
 def agregar_etiquetas_region_8_biobio(ax, region_data):
+    """
+    Agrega etiquetas especiales para comunas de la Región del Biobío.
+
+    Args:
+        ax (matplotlib.axes.Axes): Ejes donde dibujar.
+        region_data (GeoDataFrame): Datos de la Región del Biobío.
+    """
     print(f"  Agregando etiquetas especiales para Región 8 (Biobío)...")
 
     nombres_agregados = 0
@@ -1117,6 +1352,7 @@ def agregar_etiquetas_region_8_biobio(ax, region_data):
 
                 point = row['geometry'].representative_point()
 
+                # Determinar tipo de etiqueta
                 if comuna_nombre in COMUNAS_NUMEROS_REGION_8:
                     etiqueta = COMUNAS_NUMEROS_REGION_8[comuna_nombre]
                     fontsize = 9
@@ -1128,6 +1364,7 @@ def agregar_etiquetas_region_8_biobio(ax, region_data):
                     fontsize = 9
                     fontweight = 'normal'
 
+                # Determinar color de texto
                 if 'color' in row:
                     color_hex = row['color']
                     if color_hex.startswith('#'):
@@ -1141,10 +1378,8 @@ def agregar_etiquetas_region_8_biobio(ax, region_data):
                 else:
                     text_color = 'black'
 
-                offset_x = 0
-                offset_y = 0
-
-                ax.text(point.x + offset_x, point.y + offset_y, etiqueta,
+                # Agregar etiqueta
+                ax.text(point.x, point.y, etiqueta,
                         fontsize=fontsize,
                         ha='center', va='center',
                         color=text_color,
@@ -1161,6 +1396,13 @@ def agregar_etiquetas_region_8_biobio(ax, region_data):
 
 
 def agregar_etiquetas_region_9_araucania(ax, region_data):
+    """
+    Agrega etiquetas especiales para comunas de la Región de la Araucanía.
+
+    Args:
+        ax (matplotlib.axes.Axes): Ejes donde dibujar.
+        region_data (GeoDataFrame): Datos de la Región de la Araucanía.
+    """
     print(f"  Agregando etiquetas especiales para Región 9 (Araucanía)...")
 
     nombres_agregados = 0
@@ -1171,6 +1413,7 @@ def agregar_etiquetas_region_9_araucania(ax, region_data):
 
                 point = row['geometry'].representative_point()
 
+                # Determinar tipo de etiqueta
                 if comuna_nombre in COMUNAS_NUMEROS_REGION_9:
                     etiqueta = COMUNAS_NUMEROS_REGION_9[comuna_nombre]
                     fontsize = 9
@@ -1182,6 +1425,7 @@ def agregar_etiquetas_region_9_araucania(ax, region_data):
                     fontsize = 9
                     fontweight = 'normal'
 
+                # Determinar color de texto
                 if 'color' in row:
                     color_hex = row['color']
                     if color_hex.startswith('#'):
@@ -1195,10 +1439,8 @@ def agregar_etiquetas_region_9_araucania(ax, region_data):
                 else:
                     text_color = 'black'
 
-                offset_x = 0
-                offset_y = 0
-
-                ax.text(point.x + offset_x, point.y + offset_y, etiqueta,
+                # Agregar etiqueta
+                ax.text(point.x, point.y, etiqueta,
                         fontsize=fontsize,
                         ha='center', va='center',
                         color=text_color,
@@ -1215,6 +1457,13 @@ def agregar_etiquetas_region_9_araucania(ax, region_data):
 
 
 def agregar_etiquetas_region_10_loslagos(ax, region_data):
+    """
+    Agrega etiquetas especiales para comunas de la Región de Los Lagos.
+
+    Args:
+        ax (matplotlib.axes.Axes): Ejes donde dibujar.
+        region_data (GeoDataFrame): Datos de la Región de Los Lagos.
+    """
     print(f"  Agregando etiquetas especiales para Región 10 (Los Lagos)...")
 
     nombres_agregados = 0
@@ -1225,6 +1474,7 @@ def agregar_etiquetas_region_10_loslagos(ax, region_data):
 
                 point = row['geometry'].representative_point()
 
+                # Determinar tipo de etiqueta
                 if comuna_nombre in COMUNAS_NUMEROS_REGION_10:
                     etiqueta = COMUNAS_NUMEROS_REGION_10[comuna_nombre]
                     fontsize = 9
@@ -1236,6 +1486,7 @@ def agregar_etiquetas_region_10_loslagos(ax, region_data):
                     fontsize = 9
                     fontweight = 'normal'
 
+                # Determinar color de texto
                 if 'color' in row:
                     color_hex = row['color']
                     if color_hex.startswith('#'):
@@ -1249,10 +1500,8 @@ def agregar_etiquetas_region_10_loslagos(ax, region_data):
                 else:
                     text_color = 'black'
 
-                offset_x = 0
-                offset_y = 0
-
-                ax.text(point.x + offset_x, point.y + offset_y, etiqueta,
+                # Agregar etiqueta
+                ax.text(point.x, point.y, etiqueta,
                         fontsize=fontsize,
                         ha='center', va='center',
                         color=text_color,
@@ -1269,6 +1518,13 @@ def agregar_etiquetas_region_10_loslagos(ax, region_data):
 
 
 def agregar_etiquetas_region_12_magallanes(ax, region_data):
+    """
+    Agrega etiquetas especiales para comunas de la Región de Magallanes.
+
+    Args:
+        ax (matplotlib.axes.Axes): Ejes donde dibujar.
+        region_data (GeoDataFrame): Datos de la Región de Magallanes.
+    """
     print(f"  Agregando etiquetas especiales para Región 12 (Magallanes)...")
 
     nombres_agregados = 0
@@ -1279,6 +1535,7 @@ def agregar_etiquetas_region_12_magallanes(ax, region_data):
 
                 point = row['geometry'].representative_point()
 
+                # Determinar tipo de etiqueta
                 if comuna_nombre in COMUNAS_NUMEROS_REGION_12:
                     etiqueta = COMUNAS_NUMEROS_REGION_12[comuna_nombre]
                     fontsize = 9
@@ -1290,6 +1547,7 @@ def agregar_etiquetas_region_12_magallanes(ax, region_data):
                     fontsize = 9
                     fontweight = 'normal'
 
+                # Determinar color de texto
                 if 'color' in row:
                     color_hex = row['color']
                     if color_hex.startswith('#'):
@@ -1303,10 +1561,8 @@ def agregar_etiquetas_region_12_magallanes(ax, region_data):
                 else:
                     text_color = 'black'
 
-                offset_x = 0
-                offset_y = 0
-
-                ax.text(point.x + offset_x, point.y + offset_y, etiqueta,
+                # Agregar etiqueta
+                ax.text(point.x, point.y, etiqueta,
                         fontsize=fontsize,
                         ha='center', va='center',
                         color=text_color,
@@ -1323,6 +1579,13 @@ def agregar_etiquetas_region_12_magallanes(ax, region_data):
 
 
 def agregar_etiquetas_region_16_nuble(ax, region_data):
+    """
+    Agrega etiquetas especiales para comunas de la Región de Ñuble.
+
+    Args:
+        ax (matplotlib.axes.Axes): Ejes donde dibujar.
+        region_data (GeoDataFrame): Datos de la Región de Ñuble.
+    """
     print(f"  Agregando etiquetas especiales para Región 16 (Ñuble)...")
 
     nombres_agregados = 0
@@ -1333,6 +1596,7 @@ def agregar_etiquetas_region_16_nuble(ax, region_data):
 
                 point = row['geometry'].representative_point()
 
+                # Determinar tipo de etiqueta
                 if comuna_nombre in COMUNAS_NUMEROS_REGION_16:
                     etiqueta = COMUNAS_NUMEROS_REGION_16[comuna_nombre]
                     fontsize = 9
@@ -1344,6 +1608,7 @@ def agregar_etiquetas_region_16_nuble(ax, region_data):
                     fontsize = 9
                     fontweight = 'normal'
 
+                # Determinar color de texto
                 if 'color' in row:
                     color_hex = row['color']
                     if color_hex.startswith('#'):
@@ -1357,10 +1622,8 @@ def agregar_etiquetas_region_16_nuble(ax, region_data):
                 else:
                     text_color = 'black'
 
-                offset_x = 0
-                offset_y = 0
-
-                ax.text(point.x + offset_x, point.y + offset_y, etiqueta,
+                # Agregar etiqueta
+                ax.text(point.x, point.y, etiqueta,
                         fontsize=fontsize,
                         ha='center', va='center',
                         color=text_color,
@@ -1377,6 +1640,15 @@ def agregar_etiquetas_region_16_nuble(ax, region_data):
 
 
 def calcular_promedio_regional_correcto(region_data):
+    """
+    Calcula el promedio regional corregido usando votos válidos.
+
+    Args:
+        region_data (GeoDataFrame): Datos de la región.
+
+    Returns:
+        tuple: Porcentaje de Jara y Kast en la región.
+    """
     columnas_necesarias = ['jara_votos', 'kast_votos', 'emitidos_votos', 'blanco_votos', 'nulo_votos']
 
     if all(col in region_data.columns for col in columnas_necesarias):
@@ -1410,7 +1682,22 @@ def calcular_promedio_regional_correcto(region_data):
     return 0, 0
 
 
+# ============================================================================
+# FUNCIONES PARA CREAR MAPAS REGIONALES
+# ============================================================================
+
 def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
+    """
+    Crea un mapa regional completo con estadísticas.
+
+    Args:
+        region_num (int): Número de región (1-16).
+        mapa_data (GeoDataFrame): Datos combinados de toda Chile.
+        output_dir (str): Directorio para guardar el mapa.
+
+    Returns:
+        str or None: Ruta del archivo guardado o None si falla.
+    """
     region_nombre = REGIONES_NOMBRES_TITULOS.get(region_num, f"Región {region_num}")
     print(f" 🗺️ Generando mapa para {region_nombre}")
 
@@ -1418,18 +1705,21 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
         print(f" ❌ ERROR: No hay columna REGION_NUM en los datos")
         return None
 
+    # Filtrar datos de la región
     region_data = mapa_data[mapa_data['REGION_NUM'] == region_num].copy()
 
     if region_data.empty:
         print(f" ⚠ No hay datos para {region_nombre}")
         return None
 
+    # Excluir islas de la Región de Valparaíso
     islas_note = ""
     if region_num == 5:
         islands = ['Juan Fernández', 'Isla de Pascua', 'Rapa Nui', 'Easter Island']
         region_data = region_data[~region_data['NOM_COM'].str.contains('|'.join(islands), case=False, na=False)]
         islas_note = " (Islas excluidas, ver mapa separado)"
 
+    # Verificar datos electorales
     comunas_con_datos = 0
     if 'diferencia_pct' in region_data.columns:
         comunas_con_datos = region_data['diferencia_pct'].notna().sum()
@@ -1437,6 +1727,7 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
     if comunas_con_datos == 0:
         print(f" ⚠ No hay datos electorales para {region_nombre}")
 
+    # Configurar tamaño de figura según región
     if region_num in [5, 6, 7, 8, 9, 10, 12, 13, 16]:
         fig = plt.figure(figsize=(18, 16))
         gs = GridSpec(4, 2, figure=fig, height_ratios=[0.05, 0.75, 0.15, 0.05],
@@ -1446,23 +1737,28 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
         gs = GridSpec(3, 2, figure=fig, height_ratios=[0.05, 0.90, 0.05],
                       width_ratios=[0.65, 0.35], hspace=0.08, wspace=0.08)
 
+    # Título
     ax_titulo = fig.add_subplot(gs[0, :])
     ax_titulo.set_axis_off()
     titulo_texto = f'{region_nombre}{islas_note}'
     ax_titulo.text(0.5, 0.5, titulo_texto, ha='center', va='center',
                    fontsize=22, fontweight='bold', transform=ax_titulo.transAxes)
 
+    # Mapa
     ax_mapa = fig.add_subplot(gs[1, 0])
 
+    # Asignar colores según diferencia
     if 'diferencia_pct' in region_data.columns:
         region_data['color'] = region_data['diferencia_pct'].apply(asignar_color_diferencia)
     else:
         region_data['color'] = '#D3D3D3'
 
+    # Dibujar mapa
     try:
         region_data.plot(ax=ax_mapa, color=region_data['color'], edgecolor='black', linewidth=0.5)
     except Exception as e:
         print(f" ⚠ Error dibujando mapa: {e}")
+        # Dibujar comunas individualmente si falla el plot colectivo
         for idx, row in region_data.iterrows():
             if hasattr(row, 'geometry') and row.geometry is not None:
                 try:
@@ -1471,6 +1767,7 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
                 except:
                     continue
 
+    # Agregar etiquetas según región
     fontsize_regional = TAMANOS_FUENTE_REGION.get(region_num, 7)
 
     if region_num == 13:
@@ -1497,12 +1794,14 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
     ax_mapa.set_axis_off()
     ax_mapa.set_aspect('equal')
 
+    # Panel de estadísticas
     ax_stats_container = fig.add_subplot(gs[1, 1])
     ax_stats_container.set_axis_off()
 
     stats_gs = GridSpecFromSubplotSpec(4, 1, subplot_spec=gs[1, 1],
                                        height_ratios=[0.50, 0.25, 0.15, 0.10], hspace=0.15)
 
+    # Calcular estadísticas
     jara_promedio = kast_promedio = 0
     jara_gana = kast_gana = empates = 0
     dif_promedio = 0
@@ -1515,6 +1814,7 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
         kast_gana = (region_data['diferencia_pct'] < 0).sum()
         empates = (region_data['diferencia_pct'] == 0).sum()
 
+    # Gráfico de barras
     ax_barras = fig.add_subplot(stats_gs[0])
 
     if comunas_con_datos > 0:
@@ -1556,6 +1856,7 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
     ax_barras.grid(axis='y', alpha=0.3)
     ax_barras.tick_params(axis='both', labelsize=10)
 
+    # Estadísticas de comunas
     ax_comunas = fig.add_subplot(stats_gs[1])
     ax_comunas.set_axis_off()
 
@@ -1585,6 +1886,7 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
                         transform=ax_comunas.transAxes,
                         color='gray')
 
+    # Diferencia promedio
     ax_diferencia = fig.add_subplot(stats_gs[2])
     ax_diferencia.set_axis_off()
 
@@ -1616,6 +1918,7 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
                            color='gray',
                            transform=ax_diferencia.transAxes)
 
+    # Escala de colores
     ax_escala = fig.add_subplot(stats_gs[3])
 
     norm = plt.Normalize(-100, 100)
@@ -1632,6 +1935,7 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
     cbar.set_ticklabels(tick_labels)
     cbar.ax.tick_params(labelsize=6)
 
+    # Simbología para regiones con números
     if region_num in [5, 6, 7, 8, 9, 10, 12, 13, 16]:
         ax_simbologia = fig.add_subplot(gs[2, :])
         ax_simbologia.set_axis_off()
@@ -1641,6 +1945,7 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
                            fontsize=14, fontweight='bold',
                            transform=ax_simbologia.transAxes)
 
+        # Seleccionar diccionario de comunas según región
         if region_num == 5:
             comunas_dict = COMUNAS_NUMEROS_REGION_5
         elif region_num == 6:
@@ -1662,6 +1967,7 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
         else:
             comunas_dict = {}
 
+        # Mostrar simbología en dos columnas
         items = list(comunas_dict.items())
         if items:
             mitad = len(items) // 2 + len(items) % 2
@@ -1686,6 +1992,7 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
                            fontsize=9, style='italic', color='gray',
                            transform=ax_simbologia.transAxes)
 
+    # Pie de página
     if region_num in [5, 6, 7, 8, 9, 10, 12, 13, 16]:
         ax_fondo = fig.add_subplot(gs[3, :])
     else:
@@ -1702,6 +2009,7 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
 
     plt.tight_layout(rect=[0.02, 0.02, 0.98, 0.98])
 
+    # Guardar archivo
     region_num_str = str(region_num).zfill(2)
     region_nombre_safe = REGIONES_ANTIGUAS_NUM.get(region_num, f"Region_{region_num}").replace(' ', '_').replace('á',
                                                                                                                  'a').replace(
@@ -1718,7 +2026,21 @@ def crear_mapa_regional_completo(region_num, mapa_data, output_dir):
     return output_path
 
 
+# ============================================================================
+# FUNCIONES PARA MAPAS DE ISLAS
+# ============================================================================
+
 def crear_mapa_isla_pascua(mapa_data, output_dir):
+    """
+    Crea mapa separado para Isla de Pascua (Rapa Nui).
+
+    Args:
+        mapa_data (GeoDataFrame): Datos combinados de toda Chile.
+        output_dir (str): Directorio para guardar el mapa.
+
+    Returns:
+        str or None: Ruta del archivo guardado o None si falla.
+    """
     print(f" 🗺️ Generando mapa separado para Isla de Pascua (Rapa Nui) - SOLO ISLA PRINCIPAL")
 
     islands_data = mapa_data[
@@ -1728,6 +2050,7 @@ def crear_mapa_isla_pascua(mapa_data, output_dir):
         print(f" ⚠ No hay datos para Isla de Pascua")
         return None
 
+    # Límites geográficos para Isla de Pascua
     rapa_nui_bounds = {
         'minx': -109.5,
         'miny': -27.2,
@@ -1735,6 +2058,7 @@ def crear_mapa_isla_pascua(mapa_data, output_dir):
         'maxy': -27.0
     }
 
+    # Verificar datos electorales
     comunas_con_datos = 0
     if 'diferencia_pct' in islands_data.columns:
         comunas_con_datos = islands_data['diferencia_pct'].notna().sum()
@@ -1742,17 +2066,20 @@ def crear_mapa_isla_pascua(mapa_data, output_dir):
     if comunas_con_datos == 0:
         print(f" ⚠ No hay datos electorales para Isla de Pascua")
 
+    # Configurar figura
     fig = plt.figure(figsize=(14, 10))
 
     gs = GridSpec(3, 2, figure=fig, height_ratios=[0.05, 0.90, 0.05],
                   width_ratios=[0.70, 0.30], hspace=0.08, wspace=0.08)
 
+    # Título
     ax_titulo = fig.add_subplot(gs[0, :])
     ax_titulo.set_axis_off()
     ax_titulo.text(0.5, 0.5, 'Isla de Pascua (Rapa Nui) - Comuna de Isla de Pascua',
                    ha='center', va='center', fontsize=18, fontweight='bold',
                    transform=ax_titulo.transAxes)
 
+    # Mapa
     ax_mapa = fig.add_subplot(gs[1, 0])
 
     if 'diferencia_pct' in islands_data.columns:
@@ -1760,6 +2087,7 @@ def crear_mapa_isla_pascua(mapa_data, output_dir):
     else:
         islands_data['color'] = '#D3D3D3'
 
+    # Dibujar mapa con límites específicos
     try:
         islands_data.plot(ax=ax_mapa, color=islands_data['color'], edgecolor='black', linewidth=0.5)
 
@@ -1776,17 +2104,20 @@ def crear_mapa_isla_pascua(mapa_data, output_dir):
                 except:
                     continue
 
+    # Agregar nombres
     agregar_nombres_comunas(ax_mapa, islands_data, fontsize=12)
 
     ax_mapa.set_axis_off()
     ax_mapa.set_aspect('equal')
 
+    # Panel de estadísticas
     ax_stats_container = fig.add_subplot(gs[1, 1])
     ax_stats_container.set_axis_off()
 
     stats_gs = GridSpecFromSubplotSpec(4, 1, subplot_spec=gs[1, 1],
                                        height_ratios=[0.5, 0.25, 0.15, 0.10], hspace=0.15)
 
+    # Calcular estadísticas
     jara_promedio = kast_promedio = 0
     jara_gana = kast_gana = empates = 0
     dif_promedio = 0
@@ -1799,6 +2130,7 @@ def crear_mapa_isla_pascua(mapa_data, output_dir):
         kast_gana = (islands_data['diferencia_pct'] < 0).sum()
         empates = (islands_data['diferencia_pct'] == 0).sum()
 
+    # Gráfico de barras
     ax_barras = fig.add_subplot(stats_gs[0])
 
     if comunas_con_datos > 0:
@@ -1835,6 +2167,7 @@ def crear_mapa_isla_pascua(mapa_data, output_dir):
     ax_barras.grid(axis='y', alpha=0.3)
     ax_barras.tick_params(axis='both', labelsize=10)
 
+    # Estadísticas de comunas
     ax_comunas = fig.add_subplot(stats_gs[1])
     ax_comunas.set_axis_off()
 
@@ -1862,6 +2195,7 @@ def crear_mapa_isla_pascua(mapa_data, output_dir):
                         transform=ax_comunas.transAxes,
                         color='gray')
 
+    # Diferencia
     ax_diferencia = fig.add_subplot(stats_gs[2])
     ax_diferencia.set_axis_off()
 
@@ -1890,6 +2224,7 @@ def crear_mapa_isla_pascua(mapa_data, output_dir):
                            color='gray',
                            transform=ax_diferencia.transAxes)
 
+    # Escala de colores
     ax_escala = fig.add_subplot(stats_gs[3])
 
     norm = plt.Normalize(-100, 100)
@@ -1906,6 +2241,7 @@ def crear_mapa_isla_pascua(mapa_data, output_dir):
     cbar.set_ticklabels(tick_labels)
     cbar.ax.tick_params(labelsize=6)
 
+    # Pie de página
     ax_fondo = fig.add_subplot(gs[2, :])
     ax_fondo.set_axis_off()
 
@@ -1926,6 +2262,16 @@ def crear_mapa_isla_pascua(mapa_data, output_dir):
 
 
 def crear_mapa_juan_fernandez(mapa_data, output_dir):
+    """
+    Crea mapa separado para Archipiélago Juan Fernández.
+
+    Args:
+        mapa_data (GeoDataFrame): Datos combinados de toda Chile.
+        output_dir (str): Directorio para guardar el mapa.
+
+    Returns:
+        str or None: Ruta del archivo guardado o None si falla.
+    """
     print(f" 🗺️ Generando mapa separado para Archipiélago Juan Fernández")
 
     islands_data = mapa_data[
@@ -1935,6 +2281,7 @@ def crear_mapa_juan_fernandez(mapa_data, output_dir):
         print(f" ⚠ No hay datos para Archipiélago Juan Fernández")
         return None
 
+    # Límites geográficos para Juan Fernández
     juan_fernandez_bounds = {
         'minx': -79.0,
         'miny': -33.8,
@@ -1942,6 +2289,7 @@ def crear_mapa_juan_fernandez(mapa_data, output_dir):
         'maxy': -33.6
     }
 
+    # Verificar datos electorales
     comunas_con_datos = 0
     if 'diferencia_pct' in islands_data.columns:
         comunas_con_datos = islands_data['diferencia_pct'].notna().sum()
@@ -1949,17 +2297,20 @@ def crear_mapa_juan_fernandez(mapa_data, output_dir):
     if comunas_con_datos == 0:
         print(f" ⚠ No hay datos electorales para Archipiélago Juan Fernández")
 
+    # Configurar figura
     fig = plt.figure(figsize=(14, 10))
 
     gs = GridSpec(3, 2, figure=fig, height_ratios=[0.05, 0.90, 0.05],
                   width_ratios=[0.70, 0.30], hspace=0.08, wspace=0.08)
 
+    # Título
     ax_titulo = fig.add_subplot(gs[0, :])
     ax_titulo.set_axis_off()
     ax_titulo.text(0.5, 0.5, 'Comuna de Juan Fernández - Islas Robinson Crusoe y Santa Clara',
                    ha='center', va='center', fontsize=18, fontweight='bold',
                    transform=ax_titulo.transAxes)
 
+    # Mapa
     ax_mapa = fig.add_subplot(gs[1, 0])
 
     if 'diferencia_pct' in islands_data.columns:
@@ -1967,6 +2318,7 @@ def crear_mapa_juan_fernandez(mapa_data, output_dir):
     else:
         islands_data['color'] = '#D3D3D3'
 
+    # Dibujar mapa con límites específicos
     try:
         islands_data.plot(ax=ax_mapa, color=islands_data['color'], edgecolor='black', linewidth=0.5)
 
@@ -1983,17 +2335,20 @@ def crear_mapa_juan_fernandez(mapa_data, output_dir):
                 except:
                     continue
 
+    # Agregar nombres
     agregar_nombres_comunas(ax_mapa, islands_data, fontsize=12)
 
     ax_mapa.set_axis_off()
     ax_mapa.set_aspect('equal')
 
+    # Panel de estadísticas
     ax_stats_container = fig.add_subplot(gs[1, 1])
     ax_stats_container.set_axis_off()
 
     stats_gs = GridSpecFromSubplotSpec(4, 1, subplot_spec=gs[1, 1],
                                        height_ratios=[0.5, 0.25, 0.15, 0.10], hspace=0.15)
 
+    # Calcular estadísticas
     jara_promedio = kast_promedio = 0
     jara_gana = kast_gana = empates = 0
     dif_promedio = 0
@@ -2006,6 +2361,7 @@ def crear_mapa_juan_fernandez(mapa_data, output_dir):
         kast_gana = (islands_data['diferencia_pct'] < 0).sum()
         empates = (islands_data['diferencia_pct'] == 0).sum()
 
+    # Gráfico de barras
     ax_barras = fig.add_subplot(stats_gs[0])
 
     if comunas_con_datos > 0:
@@ -2042,6 +2398,7 @@ def crear_mapa_juan_fernandez(mapa_data, output_dir):
     ax_barras.grid(axis='y', alpha=0.3)
     ax_barras.tick_params(axis='both', labelsize=10)
 
+    # Estadísticas de comunas
     ax_comunas = fig.add_subplot(stats_gs[1])
     ax_comunas.set_axis_off()
 
@@ -2069,6 +2426,7 @@ def crear_mapa_juan_fernandez(mapa_data, output_dir):
                         transform=ax_comunas.transAxes,
                         color='gray')
 
+    # Diferencia
     ax_diferencia = fig.add_subplot(stats_gs[2])
     ax_diferencia.set_axis_off()
 
@@ -2097,6 +2455,7 @@ def crear_mapa_juan_fernandez(mapa_data, output_dir):
                            color='gray',
                            transform=ax_diferencia.transAxes)
 
+    # Escala de colores
     ax_escala = fig.add_subplot(stats_gs[3])
 
     norm = plt.Normalize(-100, 100)
@@ -2113,6 +2472,7 @@ def crear_mapa_juan_fernandez(mapa_data, output_dir):
     cbar.set_ticklabels(tick_labels)
     cbar.ax.tick_params(labelsize=6)
 
+    # Pie de página
     ax_fondo = fig.add_subplot(gs[2, :])
     ax_fondo.set_axis_off()
 
@@ -2132,11 +2492,27 @@ def crear_mapa_juan_fernandez(mapa_data, output_dir):
     return output_path
 
 
+# ============================================================================
+# FUNCIONES PARA MAPAS DE ÁREAS METROPOLITANAS
+# ============================================================================
+
 def crear_mapa_gran_valparaiso(mapa_data, output_dir):
+    """
+    Crea mapa del Gran Valparaíso (área metropolitana).
+
+    Args:
+        mapa_data (GeoDataFrame): Datos combinados de toda Chile.
+        output_dir (str): Directorio para guardar el mapa.
+
+    Returns:
+        str or None: Ruta del archivo guardado o None si falla.
+    """
     print(f" 🗺️ Generando mapa separado para Gran Valparaíso")
 
+    # Normalizar nombres de comunas del Gran Valparaíso
     gran_valparaiso_norm = [normalizar_nombre(comuna) for comuna in GRAN_VALPARAISO]
 
+    # Filtrar datos del Gran Valparaíso
     gran_valparaiso_data = mapa_data[
         (mapa_data['REGION_NUM'] == 5) &
         (mapa_data['NOM_COM_NORM'].isin(gran_valparaiso_norm))
@@ -2146,6 +2522,7 @@ def crear_mapa_gran_valparaiso(mapa_data, output_dir):
         print(f" ⚠ No hay datos para Gran Valparaíso")
         return None
 
+    # Verificar datos electorales
     comunas_con_datos = 0
     if 'diferencia_pct' in gran_valparaiso_data.columns:
         comunas_con_datos = gran_valparaiso_data['diferencia_pct'].notna().sum()
@@ -2153,19 +2530,23 @@ def crear_mapa_gran_valparaiso(mapa_data, output_dir):
     if comunas_con_datos == 0:
         print(f" ⚠ No hay datos electorales para Gran Valparaíso")
 
+    # Configurar figura
     fig = plt.figure(figsize=(18, 14))
 
     gs = GridSpec(3, 2, figure=fig, height_ratios=[0.05, 0.90, 0.05],
                   width_ratios=[0.65, 0.35], hspace=0.08, wspace=0.08)
 
+    # Título
     ax_titulo = fig.add_subplot(gs[0, :])
     ax_titulo.set_axis_off()
     ax_titulo.text(0.5, 0.5, 'Gran Valparaíso - Área Metropolitana',
                    ha='center', va='center', fontsize=22, fontweight='bold',
                    transform=ax_titulo.transAxes)
 
+    # Mapa
     ax_mapa = fig.add_subplot(gs[1, 0])
 
+    # Calcular estadísticas
     jara_promedio = kast_promedio = 0
     jara_gana = kast_gana = empates = 0
     dif_promedio = 0
@@ -2181,6 +2562,7 @@ def crear_mapa_gran_valparaiso(mapa_data, output_dir):
     else:
         gran_valparaiso_data['color'] = '#D3D3D3'
 
+    # Dibujar mapa
     try:
         if 'geometry' in gran_valparaiso_data.columns and not gran_valparaiso_data.geometry.isna().all():
             gran_valparaiso_data.plot(ax=ax_mapa, color=gran_valparaiso_data['color'],
@@ -2204,12 +2586,14 @@ def crear_mapa_gran_valparaiso(mapa_data, output_dir):
     ax_mapa.set_axis_off()
     ax_mapa.set_aspect('equal')
 
+    # Panel de estadísticas
     ax_stats_container = fig.add_subplot(gs[1, 1])
     ax_stats_container.set_axis_off()
 
     stats_gs = GridSpecFromSubplotSpec(4, 1, subplot_spec=gs[1, 1],
                                        height_ratios=[0.5, 0.25, 0.15, 0.10], hspace=0.15)
 
+    # Gráfico de barras
     ax_barras = fig.add_subplot(stats_gs[0])
 
     if comunas_con_datos > 0:
@@ -2246,6 +2630,7 @@ def crear_mapa_gran_valparaiso(mapa_data, output_dir):
     ax_barras.grid(axis='y', alpha=0.3)
     ax_barras.tick_params(axis='both', labelsize=10)
 
+    # Estadísticas de comunas
     ax_comunas = fig.add_subplot(stats_gs[1])
     ax_comunas.set_axis_off()
 
@@ -2278,6 +2663,7 @@ def crear_mapa_gran_valparaiso(mapa_data, output_dir):
                         transform=ax_comunas.transAxes,
                         color='gray')
 
+    # Diferencia
     ax_diferencia = fig.add_subplot(stats_gs[2])
     ax_diferencia.set_axis_off()
 
@@ -2306,6 +2692,7 @@ def crear_mapa_gran_valparaiso(mapa_data, output_dir):
                            color='gray',
                            transform=ax_diferencia.transAxes)
 
+    # Escala de colores
     ax_escala = fig.add_subplot(stats_gs[3])
 
     norm = plt.Normalize(-100, 100)
@@ -2322,6 +2709,7 @@ def crear_mapa_gran_valparaiso(mapa_data, output_dir):
     cbar.set_ticklabels(tick_labels)
     cbar.ax.tick_params(labelsize=6)
 
+    # Pie de página
     ax_fondo = fig.add_subplot(gs[2, :])
     ax_fondo.set_axis_off()
 
@@ -2342,10 +2730,22 @@ def crear_mapa_gran_valparaiso(mapa_data, output_dir):
 
 
 def crear_mapa_gran_concepcion(mapa_data, output_dir):
+    """
+    Crea mapa del Gran Concepción (área metropolitana).
+
+    Args:
+        mapa_data (GeoDataFrame): Datos combinados de toda Chile.
+        output_dir (str): Directorio para guardar el mapa.
+
+    Returns:
+        str or None: Ruta del archivo guardado o None si falla.
+    """
     print(f" 🗺️ Generando mapa separado para Gran Concepción")
 
+    # Normalizar nombres de comunas del Gran Concepción
     gran_concepcion_norm = [normalizar_nombre(comuna) for comuna in GRAN_CONCEPCION]
 
+    # Filtrar datos del Gran Concepción
     gran_concepcion_data = mapa_data[
         (mapa_data['REGION_NUM'] == 8) &
         (mapa_data['NOM_COM_NORM'].isin(gran_concepcion_norm))
@@ -2355,6 +2755,7 @@ def crear_mapa_gran_concepcion(mapa_data, output_dir):
         print(f" ⚠ No hay datos para Gran Concepción")
         return None
 
+    # Verificar datos electorales
     comunas_con_datos = 0
     if 'diferencia_pct' in gran_concepcion_data.columns:
         comunas_con_datos = gran_concepcion_data['diferencia_pct'].notna().sum()
@@ -2362,19 +2763,23 @@ def crear_mapa_gran_concepcion(mapa_data, output_dir):
     if comunas_con_datos == 0:
         print(f" ⚠ No hay datos electorales para Gran Concepción")
 
+    # Configurar figura
     fig = plt.figure(figsize=(18, 14))
 
     gs = GridSpec(3, 2, figure=fig, height_ratios=[0.05, 0.90, 0.05],
                   width_ratios=[0.65, 0.35], hspace=0.08, wspace=0.08)
 
+    # Título
     ax_titulo = fig.add_subplot(gs[0, :])
     ax_titulo.set_axis_off()
     ax_titulo.text(0.5, 0.5, 'Gran Concepción - Área Metropolitana',
                    ha='center', va='center', fontsize=22, fontweight='bold',
                    transform=ax_titulo.transAxes)
 
+    # Mapa
     ax_mapa = fig.add_subplot(gs[1, 0])
 
+    # Calcular estadísticas
     jara_promedio = kast_promedio = 0
     jara_gana = kast_gana = empates = 0
     dif_promedio = 0
@@ -2390,6 +2795,7 @@ def crear_mapa_gran_concepcion(mapa_data, output_dir):
     else:
         gran_concepcion_data['color'] = '#D3D3D3'
 
+    # Dibujar mapa
     try:
         if 'geometry' in gran_concepcion_data.columns and not gran_concepcion_data.geometry.isna().all():
             gran_concepcion_data.plot(ax=ax_mapa, color=gran_concepcion_data['color'],
@@ -2413,12 +2819,14 @@ def crear_mapa_gran_concepcion(mapa_data, output_dir):
     ax_mapa.set_axis_off()
     ax_mapa.set_aspect('equal')
 
+    # Panel de estadísticas
     ax_stats_container = fig.add_subplot(gs[1, 1])
     ax_stats_container.set_axis_off()
 
     stats_gs = GridSpecFromSubplotSpec(4, 1, subplot_spec=gs[1, 1],
                                        height_ratios=[0.5, 0.25, 0.15, 0.10], hspace=0.15)
 
+    # Gráfico de barras
     ax_barras = fig.add_subplot(stats_gs[0])
 
     if comunas_con_datos > 0:
@@ -2455,6 +2863,7 @@ def crear_mapa_gran_concepcion(mapa_data, output_dir):
     ax_barras.grid(axis='y', alpha=0.3)
     ax_barras.tick_params(axis='both', labelsize=10)
 
+    # Estadísticas de comunas
     ax_comunas = fig.add_subplot(stats_gs[1])
     ax_comunas.set_axis_off()
 
@@ -2487,6 +2896,7 @@ def crear_mapa_gran_concepcion(mapa_data, output_dir):
                         transform=ax_comunas.transAxes,
                         color='gray')
 
+    # Diferencia
     ax_diferencia = fig.add_subplot(stats_gs[2])
     ax_diferencia.set_axis_off()
 
@@ -2515,6 +2925,7 @@ def crear_mapa_gran_concepcion(mapa_data, output_dir):
                            color='gray',
                            transform=ax_diferencia.transAxes)
 
+    # Escala de colores
     ax_escala = fig.add_subplot(stats_gs[3])
 
     norm = plt.Normalize(-100, 100)
@@ -2531,6 +2942,7 @@ def crear_mapa_gran_concepcion(mapa_data, output_dir):
     cbar.set_ticklabels(tick_labels)
     cbar.ax.tick_params(labelsize=6)
 
+    # Pie de página
     ax_fondo = fig.add_subplot(gs[2, :])
     ax_fondo.set_axis_off()
 
@@ -2551,10 +2963,22 @@ def crear_mapa_gran_concepcion(mapa_data, output_dir):
 
 
 def crear_mapa_conurbacion_santiago(mapa_data, output_dir):
+    """
+    Crea mapa del Gran Santiago (Santiago Metropolitano).
+
+    Args:
+        mapa_data (GeoDataFrame): Datos combinados de toda Chile.
+        output_dir (str): Directorio para guardar el mapa.
+
+    Returns:
+        str or None: Ruta del archivo guardado o None si falla.
+    """
     print(f" 🗺️ Generando mapa separado para Gran Santiago (Santiago Metropolitano)")
 
+    # Cargar GeoJSON especializado para Gran Santiago
     gran_santiago_gdf = cargar_gran_santiago_geojson()
 
+    # Filtrar datos de la conurbación de Santiago
     conurbacion_norm = [normalizar_nombre(comuna) for comuna in CONURBACION_SANTIAGO]
     conurb_data = mapa_data[
         (mapa_data['REGION_NUM'] == 13) &
@@ -2565,6 +2989,7 @@ def crear_mapa_conurbacion_santiago(mapa_data, output_dir):
         print(f" ⚠ No hay datos para el Gran Santiago")
         return None
 
+    # Verificar datos electorales
     comunas_con_datos = 0
     if 'diferencia_pct' in conurb_data.columns:
         comunas_con_datos = conurb_data['diferencia_pct'].notna().sum()
@@ -2573,6 +2998,7 @@ def crear_mapa_conurbacion_santiago(mapa_data, output_dir):
         print(f" ⚠ No hay datos electorales para el Gran Santiago")
         return None
 
+    # Calcular estadísticas
     jara_promedio = kast_promedio = 0
     dif_promedio = 0
 
@@ -2580,10 +3006,12 @@ def crear_mapa_conurbacion_santiago(mapa_data, output_dir):
         jara_promedio, kast_promedio = calcular_promedio_regional_correcto(conurb_data)
         dif_promedio = jara_promedio - kast_promedio
 
+    # Configurar figura grande
     fig = plt.figure(figsize=(36, 32))
 
     gs = GridSpec(5, 1, figure=fig, height_ratios=[0.04, 0.06, 0.70, 0.15, 0.05], hspace=0.03)
 
+    # Título
     ax_titulo = fig.add_subplot(gs[0])
     ax_titulo.set_axis_off()
 
@@ -2596,6 +3024,7 @@ def crear_mapa_conurbacion_santiago(mapa_data, output_dir):
                    ha='center', va='center', fontsize=32, fontweight='bold',
                    transform=ax_titulo.transAxes)
 
+    # Estadísticas principales
     ax_stats = fig.add_subplot(gs[1])
     ax_stats.set_axis_off()
 
@@ -2622,6 +3051,7 @@ def crear_mapa_conurbacion_santiago(mapa_data, output_dir):
                       fontsize=24, fontweight='bold', color='gray',
                       transform=ax_stats.transAxes)
 
+    # Mapa principal
     ax_mapa = fig.add_subplot(gs[2])
 
     if comunas_con_datos > 0:
@@ -2629,6 +3059,7 @@ def crear_mapa_conurbacion_santiago(mapa_data, output_dir):
     else:
         conurb_data['color'] = '#D3D3D3'
 
+    # Dibujar mapa
     try:
         if 'geometry' in conurb_data.columns and not conurb_data.geometry.isna().all():
             conurb_data.plot(ax=ax_mapa, color=conurb_data['color'], edgecolor='black', linewidth=1.2)
@@ -2651,6 +3082,7 @@ def crear_mapa_conurbacion_santiago(mapa_data, output_dir):
     ax_mapa.set_axis_off()
     ax_mapa.set_aspect('equal')
 
+    # Simbología
     ax_simbologia = fig.add_subplot(gs[3])
     ax_simbologia.set_axis_off()
 
@@ -2664,6 +3096,7 @@ def crear_mapa_conurbacion_santiago(mapa_data, output_dir):
 
     espaciado_vertical = 0.09
 
+    # Primera columna de simbología
     for i, (comuna, numero) in enumerate(items[:mitad]):
         y_pos = 0.88 - i * espaciado_vertical
         ax_simbologia.text(0.25, y_pos, f'{numero}. {comuna}',
@@ -2671,6 +3104,7 @@ def crear_mapa_conurbacion_santiago(mapa_data, output_dir):
                            fontsize=22,
                            transform=ax_simbologia.transAxes)
 
+    # Segunda columna de simbología
     for i, (comuna, numero) in enumerate(items[mitad:]):
         y_pos = 0.88 - i * espaciado_vertical
         ax_simbologia.text(0.65, y_pos, f'{numero}. {comuna}',
@@ -2678,6 +3112,7 @@ def crear_mapa_conurbacion_santiago(mapa_data, output_dir):
                            fontsize=22,
                            transform=ax_simbologia.transAxes)
 
+    # Escala de colores
     ax_escala = fig.add_subplot(gs[4])
 
     norm = plt.Normalize(-100, 100)
@@ -2697,35 +3132,54 @@ def crear_mapa_conurbacion_santiago(mapa_data, output_dir):
 
     plt.tight_layout(rect=[0.01, 0.01, 0.99, 0.99])
 
+    # Guardar archivo
     if gran_santiago_gdf is not None:
-        output_path = os.path.join(output_dir, "GRAN_SANTIAGO_METROPOLITANO_MAXIMIZADO.png")
+        output_path = os.path.join(output_dir, "GRAN_SANTIAGO_METROPOLITANO.png")
     else:
-        output_path = os.path.join(output_dir, "CONURBACION_SANTIAGO_MAXIMIZADO.png")
+        output_path = os.path.join(output_dir, "CONURBACION_SANTIAGO_.png")
 
     plt.savefig(output_path, dpi=400, bbox_inches='tight', pad_inches=0.1)
     plt.close(fig)
 
-    print(f" ✓ Mapa de Gran Santiago (MAXIMIZADO) guardado: {output_path}")
+    print(f" ✓ Mapa de Gran Santiago guardado: {output_path}")
     return output_path
 
 
+# ============================================================================
+# FUNCIONES PARA MAPAS NACIONALES Y REPORTES
+# ============================================================================
+
 def crear_mapa_chile_tres_partes(mapa_data, output_dir):
+    """
+    Crea mapa de Chile dividido en tres zonas (Norte, Centro, Sur).
+
+    Args:
+        mapa_data (GeoDataFrame): Datos combinados de toda Chile.
+        output_dir (str): Directorio para guardar el mapa.
+
+    Returns:
+        str or None: Ruta del archivo guardado o None si falla.
+    """
     print(f" 🗺️ Generando mapa de Chile en tres partes (Norte, Centro, Sur) - SIN ETIQUETAS DE COMUNAS")
 
+    # Filtrar datos con resultados electorales
     datos_chile = mapa_data[mapa_data['diferencia_pct'].notna()].copy()
 
     if datos_chile.empty:
         print(f" ⚠ No hay datos suficientes para el mapa de Chile en tres partes")
         return None
 
+    # Excluir islas
     datos_chile = datos_chile[~datos_chile['NOM_COM'].str.contains('Isla de Pascua|Rapa Nui|Juan Fernández',
                                                                    case=False, na=False)]
 
+    # Dividir en zonas
     norte_data = datos_chile[datos_chile['REGION_NUM'].isin([15, 1, 2, 3, 4])].copy()
     centro_data = datos_chile[datos_chile['REGION_NUM'].isin([5, 6, 7, 8, 13, 16])].copy()
     sur_data = datos_chile[datos_chile['REGION_NUM'].isin([9, 10, 11, 12, 14])].copy()
 
     def calcular_estadisticas_zona(zona_data, nombre_zona):
+        """Calcula estadísticas para una zona geográfica."""
         if zona_data.empty:
             return {
                 'nombre': nombre_zona,
@@ -2756,10 +3210,12 @@ def crear_mapa_chile_tres_partes(mapa_data, output_dir):
             'total_comunas': len(zona_data)
         }
 
+    # Calcular estadísticas por zona
     estadisticas_norte = calcular_estadisticas_zona(norte_data, 'Norte')
     estadisticas_centro = calcular_estadisticas_zona(centro_data, 'Centro')
     estadisticas_sur = calcular_estadisticas_zona(sur_data, 'Sur')
 
+    # Configurar figura
     fig = plt.figure(figsize=(30, 20))
 
     gs = GridSpec(3, 4, figure=fig,
@@ -2767,12 +3223,14 @@ def crear_mapa_chile_tres_partes(mapa_data, output_dir):
                   width_ratios=[0.30, 0.30, 0.30, 0.10],
                   hspace=0.08, wspace=0.10)
 
+    # Título principal
     ax_titulo = fig.add_subplot(gs[0, :])
     ax_titulo.set_axis_off()
     ax_titulo.text(0.5, 0.5, 'Análisis Segunda Vuelta, 2025 - Resultados Nacionales',
                    ha='center', va='center', fontsize=32, fontweight='bold',
                    transform=ax_titulo.transAxes)
 
+    # Mapa Zona Norte
     ax_norte = fig.add_subplot(gs[1, 0])
 
     if not norte_data.empty:
@@ -2791,6 +3249,7 @@ def crear_mapa_chile_tres_partes(mapa_data, output_dir):
     ax_norte.set_axis_off()
     ax_norte.set_aspect('equal')
 
+    # Mapa Zona Centro
     ax_centro = fig.add_subplot(gs[1, 1])
 
     if not centro_data.empty:
@@ -2809,6 +3268,7 @@ def crear_mapa_chile_tres_partes(mapa_data, output_dir):
     ax_centro.set_axis_off()
     ax_centro.set_aspect('equal')
 
+    # Mapa Zona Sur
     ax_sur = fig.add_subplot(gs[1, 2])
 
     if not sur_data.empty:
@@ -2827,6 +3287,7 @@ def crear_mapa_chile_tres_partes(mapa_data, output_dir):
     ax_sur.set_axis_off()
     ax_sur.set_aspect('equal')
 
+    # Leyenda de colores
     ax_leyenda = fig.add_subplot(gs[1, 3])
     ax_leyenda.set_axis_off()
 
@@ -2835,6 +3296,7 @@ def crear_mapa_chile_tres_partes(mapa_data, output_dir):
                     fontsize=18, fontweight='bold',
                     transform=ax_leyenda.transAxes)
 
+    # Elementos de la leyenda
     leyenda_elementos = [
         mpatches.Patch(color='#B91C1C', label='Jara +50% o más'),
         mpatches.Patch(color='#C92A2A', label='Jara +40% a +50%'),
@@ -2859,6 +3321,7 @@ def crear_mapa_chile_tres_partes(mapa_data, output_dir):
                       title_fontsize=11,
                       framealpha=0.9)
 
+    # Gráfico de barras comparativo
     ax_estadisticas = fig.add_subplot(gs[2, :3])
     ax_estadisticas.set_axis_off()
 
@@ -2869,8 +3332,10 @@ def crear_mapa_chile_tres_partes(mapa_data, output_dir):
     x = np.arange(len(zonas))
     width = 0.35
 
+    # Barras para Jara
     bars_jara = ax_estadisticas.bar(x - width / 2, jara_porcentajes, width,
                                     label='Jara', color='#E54540', edgecolor='black')
+    # Barras para Kast
     bars_kast = ax_estadisticas.bar(x + width / 2, kast_porcentajes, width,
                                     label='Kast', color='#2D426C', edgecolor='black')
 
@@ -2882,6 +3347,7 @@ def crear_mapa_chile_tres_partes(mapa_data, output_dir):
     ax_estadisticas.set_xticklabels(zonas, fontsize=12)
     ax_estadisticas.legend(fontsize=12)
 
+    # Agregar valores en barras
     for bars in [bars_jara, bars_kast]:
         for bar in bars:
             height = bar.get_height()
@@ -2893,6 +3359,7 @@ def crear_mapa_chile_tres_partes(mapa_data, output_dir):
     ax_estadisticas.grid(axis='y', alpha=0.3)
     ax_estadisticas.set_ylim(0, max(max(jara_porcentajes), max(kast_porcentajes)) * 1.2)
 
+    # Información adicional
     ax_info = fig.add_subplot(gs[2, 3])
     ax_info.set_axis_off()
 
@@ -2921,34 +3388,47 @@ def crear_mapa_chile_tres_partes(mapa_data, output_dir):
                  transform=ax_info.transAxes,
                  linespacing=1.4)
 
+    # Pie de página
     ax_pie = fig.add_axes([0.1, 0.02, 0.8, 0.03])
     ax_pie.set_axis_off()
 
     fecha = datetime.now().strftime("%d/%m/%Y")
-    info_text = f"Análisis Segunda Vuelta Presidencial Chile 2025 - Jara vs Kast | Chile en tres zonas | Generado: {fecha} | Nota: Islas (Pascua y Juan Fernández) no incluidas"
+    info_text = f"Análisis Segunda Vuelta Presidencial Chile 2025 - Jara vs Kast | Chile mapa completo | Generado: {fecha} | Nota: Islas (Pascua y Juan Fernández) no incluidas"
     ax_pie.text(0.5, 0.5, info_text,
                 ha='center', va='center',
                 fontsize=10, color='gray',
                 transform=ax_pie.transAxes)
 
     plt.tight_layout(rect=[0.02, 0.05, 0.98, 0.98])
-    output_path = os.path.join(output_dir, "CHILE_TRES_PARTES_NACIONAL.png")
+    output_path = os.path.join(output_dir, "CHILE_MAP_COMPLETO.png")
     plt.savefig(output_path, dpi=300, bbox_inches='tight', pad_inches=0.2)
     plt.close(fig)
 
-    print(f" ✓ Mapa de Chile en tres partes guardado: {output_path}")
+    print(f" ✓ Mapa de Chile completo: {output_path}")
     return output_path
 
 
 def crear_reporte_nacional_completo(mapa_data, output_dir):
+    """
+    Crea reporte nacional completo con estadísticas detalladas.
+
+    Args:
+        mapa_data (GeoDataFrame): Datos combinados de toda Chile.
+        output_dir (str): Directorio para guardar el reporte.
+
+    Returns:
+        str or None: Ruta del archivo guardado o None si falla.
+    """
     print(f" 📊 Generando reporte nacional completo")
 
+    # Filtrar datos con resultados
     datos_nacionales = mapa_data[mapa_data['diferencia_pct'].notna()].copy()
 
     if datos_nacionales.empty:
         print(f" ⚠ No hay datos suficientes para el reporte nacional")
         return None
 
+    # Calcular totales nacionales
     votos_emitidos = datos_nacionales['emitidos_votos'].sum()
     votos_blanco = datos_nacionales['blanco_votos'].sum()
     votos_nulo = datos_nacionales['nulo_votos'].sum()
@@ -2957,6 +3437,7 @@ def crear_reporte_nacional_completo(mapa_data, output_dir):
     jara_votos_total = datos_nacionales['jara_votos'].sum()
     kast_votos_total = datos_nacionales['kast_votos'].sum()
 
+    # Calcular porcentajes nacionales
     if votos_validos > 0:
         jara_nacional_pct = (jara_votos_total / votos_validos) * 100
         kast_nacional_pct = (kast_votos_total / votos_validos) * 100
@@ -2966,14 +3447,17 @@ def crear_reporte_nacional_completo(mapa_data, output_dir):
 
     dif_nacional_pct = jara_nacional_pct - kast_nacional_pct
 
+    # Estadísticas por comuna
     total_comunas = len(datos_nacionales)
     jara_gana = (datos_nacionales['diferencia_pct'] > 0).sum()
     kast_gana = (datos_nacionales['diferencia_pct'] < 0).sum()
     empates = (datos_nacionales['diferencia_pct'] == 0).sum()
 
+    # Top 5 comunas por candidato
     comunas_jara_top = datos_nacionales.sort_values('jara_pct', ascending=False).head(5)
     comunas_kast_top = datos_nacionales.sort_values('kast_pct', ascending=False).head(5)
 
+    # Configurar figura
     fig = plt.figure(figsize=(28, 20))
 
     gs = GridSpec(4, 3, figure=fig,
@@ -2981,12 +3465,14 @@ def crear_reporte_nacional_completo(mapa_data, output_dir):
                   width_ratios=[0.33, 0.34, 0.33],
                   hspace=0.12, wspace=0.10)
 
+    # Título principal
     ax_titulo = fig.add_subplot(gs[0, :])
     ax_titulo.set_axis_off()
     ax_titulo.text(0.5, 0.5, 'REPORTE NACIONAL COMPLETO',
                    ha='center', va='center', fontsize=32, fontweight='bold',
                    transform=ax_titulo.transAxes)
 
+    # Panel Kast
     ax_kast = fig.add_subplot(gs[1, 0])
     ax_kast.set_axis_off()
 
@@ -3013,6 +3499,7 @@ def crear_reporte_nacional_completo(mapa_data, output_dir):
                  ha='center', va='center', fontsize=16,
                  transform=ax_kast.transAxes)
 
+    # Panel Jara
     ax_jara = fig.add_subplot(gs[1, 2])
     ax_jara.set_axis_off()
 
@@ -3039,6 +3526,7 @@ def crear_reporte_nacional_completo(mapa_data, output_dir):
                  ha='center', va='center', fontsize=16,
                  transform=ax_jara.transAxes)
 
+    # Panel central (diferencia)
     ax_centro = fig.add_subplot(gs[1, 1])
     ax_centro.set_axis_off()
 
@@ -3062,12 +3550,14 @@ def crear_reporte_nacional_completo(mapa_data, output_dir):
                    ha='center', va='center', fontsize=16,
                    color='gray', transform=ax_centro.transAxes)
 
+    # Top 5 comunas Kast
     ax_top_kast = fig.add_subplot(gs[2, 0])
 
     if not comunas_kast_top.empty:
         comunas_nombres = comunas_kast_top['NOM_COM'].tolist()
         porcentajes = comunas_kast_top['kast_pct'].tolist()
 
+        # Acortar nombres largos
         comunas_nombres_short = []
         for nombre in comunas_nombres:
             if len(nombre) > 15:
@@ -3082,6 +3572,7 @@ def crear_reporte_nacional_completo(mapa_data, output_dir):
         ax_top_kast.set_xlabel('Porcentaje de Kast (%)', fontsize=14, fontweight='bold')
         ax_top_kast.set_title('TOP 5 COMUNAS - KAST GANA', fontsize=16, fontweight='bold', pad=10)
 
+        # Agregar valores en barras
         for i, bar in enumerate(bars):
             width = bar.get_width()
             ax_top_kast.text(width + 0.5, bar.get_y() + bar.get_height() / 2,
@@ -3100,12 +3591,14 @@ def crear_reporte_nacional_completo(mapa_data, output_dir):
         ax_top_kast.set_title('TOP 5 COMUNAS - KAST GANA', fontsize=16, fontweight='bold', pad=10)
         ax_top_kast.set_axis_off()
 
+    # Top 5 comunas Jara
     ax_top_jara = fig.add_subplot(gs[2, 2])
 
     if not comunas_jara_top.empty:
         comunas_nombres = comunas_jara_top['NOM_COM'].tolist()
         porcentajes = comunas_jara_top['jara_pct'].tolist()
 
+        # Acortar nombres largos
         comunas_nombres_short = []
         for nombre in comunas_nombres:
             if len(nombre) > 15:
@@ -3120,6 +3613,7 @@ def crear_reporte_nacional_completo(mapa_data, output_dir):
         ax_top_jara.set_xlabel('Porcentaje de Jara (%)', fontsize=14, fontweight='bold')
         ax_top_jara.set_title('TOP 5 COMUNAS - JARA GANA', fontsize=16, fontweight='bold', pad=10)
 
+        # Agregar valores en barras
         for i, bar in enumerate(bars):
             width = bar.get_width()
             ax_top_jara.text(width + 0.5, bar.get_y() + bar.get_height() / 2,
@@ -3138,13 +3632,16 @@ def crear_reporte_nacional_completo(mapa_data, output_dir):
         ax_top_jara.set_title('TOP 5 COMUNAS - JARA GANA', fontsize=16, fontweight='bold', pad=10)
         ax_top_jara.set_axis_off()
 
+    # Estadísticas de votos
     ax_estadisticas = fig.add_subplot(gs[2, 1])
     ax_estadisticas.set_axis_off()
 
+    # Calcular porcentajes de votos
     votos_nulo_pct = (votos_nulo / votos_emitidos) * 100 if votos_emitidos > 0 else 0
     votos_blanco_pct = (votos_blanco / votos_emitidos) * 100 if votos_emitidos > 0 else 0
     votos_validos_pct = (votos_validos / votos_emitidos) * 100 if votos_emitidos > 0 else 0
 
+    # Formatear números con separador de miles
     votos_emitidos_str = f'{votos_emitidos:,.0f}'.replace(',', '.')
     votos_validos_str = f'{votos_validos:,.0f}'.replace(',', '.')
     votos_nulo_str = f'{votos_nulo:,.0f}'.replace(',', '.')
@@ -3162,6 +3659,7 @@ def crear_reporte_nacional_completo(mapa_data, output_dir):
                          ha='center', va='center', fontsize=16,
                          transform=ax_estadisticas.transAxes, linespacing=1.6)
 
+    # Pie de página
     ax_fondo = fig.add_subplot(gs[3, :])
     ax_fondo.set_axis_off()
 
@@ -3182,8 +3680,19 @@ def crear_reporte_nacional_completo(mapa_data, output_dir):
 
 
 def crear_tabla_capitales_regionales(mapa_data, output_dir):
+    """
+    Crea tabla de resultados en capitales regionales.
+
+    Args:
+        mapa_data (GeoDataFrame): Datos combinados de toda Chile.
+        output_dir (str): Directorio para guardar la tabla.
+
+    Returns:
+        str or None: Ruta del archivo guardado o None si falla.
+    """
     print(f" 📋 Generando tabla de capitales regionales")
 
+    # Definir capitales regionales
     capitales_regionales = [
         {"region_num": 15, "region_nombre": "Arica y Parinacota", "capital": "Arica"},
         {"region_num": 1, "region_nombre": "Tarapacá", "capital": "Iquique"},
@@ -3208,6 +3717,7 @@ def crear_tabla_capitales_regionales(mapa_data, output_dir):
         region_num = capital_info["region_num"]
         capital_nombre = capital_info["capital"]
 
+        # Buscar datos de la capital
         capital_data = mapa_data[
             (mapa_data['REGION_NUM'] == region_num) &
             (mapa_data['NOM_COM'].str.contains(capital_nombre, case=False, na=False))
@@ -3221,6 +3731,7 @@ def crear_tabla_capitales_regionales(mapa_data, output_dir):
             kast_pct = capital_row['kast_pct'] if 'kast_pct' in capital_row and not pd.isna(
                 capital_row['kast_pct']) else 0
 
+            # Determinar ganador
             if jara_pct > kast_pct:
                 ganador = "JARA"
                 color_ganador = "#E54540"
@@ -3249,21 +3760,26 @@ def crear_tabla_capitales_regionales(mapa_data, output_dir):
         print(f" ⚠ No hay datos para capitales regionales")
         return None
 
+    # Crear DataFrame
     df_capitales = pd.DataFrame(datos_capitales)
 
+    # Configurar figura
     fig = plt.figure(figsize=(22, 14))
 
     gs = GridSpec(3, 1, figure=fig, height_ratios=[0.10, 0.80, 0.10], hspace=0.05)
 
+    # Título
     ax_titulo = fig.add_subplot(gs[0])
     ax_titulo.set_axis_off()
     ax_titulo.text(0.5, 0.5, 'RESULTADOS EN CAPITALES REGIONALES DE CHILE',
                    ha='center', va='center', fontsize=28, fontweight='bold',
                    transform=ax_titulo.transAxes)
 
+    # Tabla
     ax_tabla = fig.add_subplot(gs[1])
     ax_tabla.set_axis_off()
 
+    # Preparar datos para tabla
     tabla_data = []
     for i, row in df_capitales.iterrows():
         tabla_data.append([
@@ -3279,6 +3795,7 @@ def crear_tabla_capitales_regionales(mapa_data, output_dir):
 
     colores_filas = ['#f5f5f5', 'white']
 
+    # Crear tabla
     tabla = ax_tabla.table(cellText=tabla_data,
                            colLabels=column_labels,
                            cellLoc='center',
@@ -3290,12 +3807,14 @@ def crear_tabla_capitales_regionales(mapa_data, output_dir):
     tabla.set_fontsize(11)
     tabla.scale(1.2, 2.2)
 
+    # Formatear encabezados
     for j in range(len(column_labels)):
         cell = tabla[(0, j)]
         cell.set_text_props(fontweight='bold', fontsize=12)
         cell.set_facecolor('#2D426C')
         cell.set_text_props(color='white')
 
+    # Formatear celdas de datos
     for i in range(len(tabla_data) + 1):
         for j in range(len(column_labels)):
             cell = tabla[(i, j)]
@@ -3303,6 +3822,7 @@ def crear_tabla_capitales_regionales(mapa_data, output_dir):
             if i > 0:
                 cell.set_facecolor(colores_filas[i % 2])
 
+            # Resaltar ganador
             if j == 5 and i > 0:
                 ganador = tabla_data[i - 1][5]
                 if ganador == "JARA":
@@ -3315,6 +3835,7 @@ def crear_tabla_capitales_regionales(mapa_data, output_dir):
                     cell.set_facecolor('#F0F0F0')
                     cell.set_text_props(color='gray', fontweight='bold')
 
+    # Resumen
     ax_resumen = fig.add_subplot(gs[2])
     ax_resumen.set_axis_off()
 
@@ -3353,6 +3874,7 @@ def crear_tabla_capitales_regionales(mapa_data, output_dir):
 
     print(f" ✓ Tabla de capitales regionales guardada: {output_path}")
 
+    # Guardar también como CSV
     csv_path = os.path.join(output_dir, "TABLA_CAPITALES_REGIONALES.csv")
     df_capitales.to_csv(csv_path, index=False, encoding='utf-8-sig')
     print(f" ✓ Datos de capitales regionales guardados como CSV: {csv_path}")
@@ -3361,8 +3883,19 @@ def crear_tabla_capitales_regionales(mapa_data, output_dir):
 
 
 def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
+    """
+    Crea reporte completo para el Gran Santiago.
+
+    Args:
+        mapa_data (GeoDataFrame): Datos combinados de toda Chile.
+        output_dir (str): Directorio para guardar el reporte.
+
+    Returns:
+        str or None: Ruta del archivo guardado o None si falla.
+    """
     print(f" 📊 Generando reporte completo para Gran Santiago")
 
+    # Filtrar datos del Gran Santiago
     conurbacion_norm = [normalizar_nombre(comuna) for comuna in CONURBACION_SANTIAGO]
     gran_santiago_data = mapa_data[
         (mapa_data['REGION_NUM'] == 13) &
@@ -3374,15 +3907,19 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
         print(f" ⚠ No hay datos suficientes para el reporte de Gran Santiago")
         return None
 
+    # Calcular estadísticas
     jara_promedio, kast_promedio = calcular_promedio_regional_correcto(gran_santiago_data)
     dif_promedio = jara_promedio - kast_promedio
 
+    # Separar comunas por ganador
     comunas_jara = gran_santiago_data[gran_santiago_data['diferencia_pct'] > 0].copy()
     comunas_kast = gran_santiago_data[gran_santiago_data['diferencia_pct'] < 0].copy()
 
+    # Top 5 comunas por candidato
     comunas_jara_top = comunas_jara.sort_values('jara_pct', ascending=False).head(5)
     comunas_kast_top = comunas_kast.sort_values('kast_pct', ascending=False).head(5)
 
+    # URLs de fotos de candidatos
     jara_foto_urls = [
         "https://upload.wikimedia.org/wikipedia/commons/2/2d/Live_Especial_Mujeres_Comit%C3%A9_Pol%C3%ADtico%2C_Ministra_Jannette_Jara_%28cropped%29.jpg",
         "https://www.latercera.com/resizer/v2/W4LV4DZTLVG2JLA4FSNXGSZ53U.jpg?auth=ac72355711cd6ba404761233d4e8c5db88b09d7e1383330b23f44f6fe4c4da02&smart=true&width=800&height=533&quality=70",
@@ -3396,6 +3933,7 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
     ]
 
     def descargar_imagen(urls, nombre_candidato):
+        """Descarga imagen de candidato desde URLs alternativas."""
         for url in urls:
             try:
                 print(f"  Intentando descargar imagen de {nombre_candidato} desde: {url[:60]}...")
@@ -3429,10 +3967,12 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
         print(f"  ✗ No se pudo descargar imagen de {nombre_candidato}, usando placeholder")
         return None
 
+    # Descargar imágenes
     print(" 📷 Descargando imágenes de candidatos...")
     jara_img = descargar_imagen(jara_foto_urls, "Jeannette Jara")
     kast_img = descargar_imagen(kast_foto_urls, "José Antonio Kast")
 
+    # Configurar figura
     fig = plt.figure(figsize=(28, 20))
 
     gs = GridSpec(4, 3, figure=fig,
@@ -3440,12 +3980,14 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
                   width_ratios=[0.33, 0.34, 0.33],
                   hspace=0.12, wspace=0.10)
 
+    # Título principal
     ax_titulo = fig.add_subplot(gs[0, :])
     ax_titulo.set_axis_off()
     ax_titulo.text(0.5, 0.5, 'REPORTE GRAN SANTIAGO',
                    ha='center', va='center', fontsize=32, fontweight='bold',
                    transform=ax_titulo.transAxes)
 
+    # Panel Kast
     ax_kast = fig.add_subplot(gs[1, 0])
     ax_kast.set_axis_off()
 
@@ -3458,6 +4000,7 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
                  transform=ax_kast.transAxes,
                  bbox=dict(boxstyle="round,pad=0.3", facecolor='white', edgecolor='black', alpha=0.9))
 
+    # Mostrar imagen de Kast si está disponible
     if kast_img is not None:
         try:
             kast_img_resized = kast_img.resize((250, 300), Image.Resampling.LANCZOS)
@@ -3476,6 +4019,7 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
                  color='#2D426C', transform=ax_kast.transAxes,
                  bbox=dict(boxstyle="round,pad=0.3", facecolor='white', edgecolor='black', alpha=0.9))
 
+    # Panel Jara
     ax_jara = fig.add_subplot(gs[1, 2])
     ax_jara.set_axis_off()
 
@@ -3488,6 +4032,7 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
                  transform=ax_jara.transAxes,
                  bbox=dict(boxstyle="round,pad=0.3", facecolor='white', edgecolor='black', alpha=0.9))
 
+    # Mostrar imagen de Jara si está disponible
     if jara_img is not None:
         try:
             jara_img_resized = jara_img.resize((250, 300), Image.Resampling.LANCZOS)
@@ -3506,6 +4051,7 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
                  color='#E54540', transform=ax_jara.transAxes,
                  bbox=dict(boxstyle="round,pad=0.3", facecolor='white', edgecolor='black', alpha=0.9))
 
+    # Panel central (estadísticas)
     ax_centro = fig.add_subplot(gs[1, 1])
     ax_centro.set_axis_off()
 
@@ -3528,12 +4074,14 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
                    ha='center', va='center', fontsize=18,
                    transform=ax_centro.transAxes)
 
+    # Top 5 comunas Kast
     ax_top_kast = fig.add_subplot(gs[2, 0])
 
     if not comunas_kast_top.empty:
         comunas_nombres = comunas_kast_top['NOM_COM'].tolist()
         porcentajes = comunas_kast_top['kast_pct'].tolist()
 
+        # Acortar nombres largos
         comunas_nombres_short = []
         for nombre in comunas_nombres:
             if len(nombre) > 15:
@@ -3548,6 +4096,7 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
         ax_top_kast.set_xlabel('Porcentaje de Kast (%)', fontsize=14, fontweight='bold')
         ax_top_kast.set_title('TOP 5 COMUNAS - KAST GANA', fontsize=16, fontweight='bold', pad=10)
 
+        # Agregar valores en barras
         for i, bar in enumerate(bars):
             width = bar.get_width()
             ax_top_kast.text(width + 0.5, bar.get_y() + bar.get_height() / 2,
@@ -3566,12 +4115,14 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
         ax_top_kast.set_title('TOP 5 COMUNAS - KAST GANA', fontsize=16, fontweight='bold', pad=10)
         ax_top_kast.set_axis_off()
 
+    # Top 5 comunas Jara
     ax_top_jara = fig.add_subplot(gs[2, 2])
 
     if not comunas_jara_top.empty:
         comunas_nombres = comunas_jara_top['NOM_COM'].tolist()
         porcentajes = comunas_jara_top['jara_pct'].tolist()
 
+        # Acortar nombres largos
         comunas_nombres_short = []
         for nombre in comunas_nombres:
             if len(nombre) > 15:
@@ -3586,6 +4137,7 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
         ax_top_jara.set_xlabel('Porcentaje de Jara (%)', fontsize=14, fontweight='bold')
         ax_top_jara.set_title('TOP 5 COMUNAS - JARA GANA', fontsize=16, fontweight='bold', pad=10)
 
+        # Agregar valores en barras
         for i, bar in enumerate(bars):
             width = bar.get_width()
             ax_top_jara.text(width + 0.5, bar.get_y() + bar.get_height() / 2,
@@ -3604,6 +4156,7 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
         ax_top_jara.set_title('TOP 5 COMUNAS - JARA GANA', fontsize=16, fontweight='bold', pad=10)
         ax_top_jara.set_axis_off()
 
+    # Estadísticas generales
     ax_info = fig.add_subplot(gs[2, 1])
     ax_info.set_axis_off()
 
@@ -3619,6 +4172,7 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
                  ha='center', va='center', fontsize=16,
                  transform=ax_info.transAxes, linespacing=1.6)
 
+    # Pie de página
     ax_fondo = fig.add_subplot(gs[3, :])
     ax_fondo.set_axis_off()
 
@@ -3638,7 +4192,18 @@ def crear_reporte_gran_santiago_completo(mapa_data, output_dir):
     return output_path
 
 
+# ============================================================================
+# FUNCIONES DE REPORTE FINAL Y MAPA NACIONAL
+# ============================================================================
+
 def generar_reporte_final(mapa_data, output_dir):
+    """
+    Genera reporte final en texto con estadísticas generales.
+
+    Args:
+        mapa_data (GeoDataFrame): Datos combinados de toda Chile.
+        output_dir (str): Directorio para guardar el reporte.
+    """
     reporte_path = os.path.join(output_dir, "REPORTE_FINAL.txt")
 
     print(f"\n📋 Generando reporte final...")
@@ -3656,6 +4221,7 @@ def generar_reporte_final(mapa_data, output_dir):
             f.write("ADVERTENCIA: No se encontró información de región en los datos\n\n")
             return
 
+        # Estadísticas generales
         total_comunas = len(mapa_data)
         comunas_con_datos = 0
         if 'diferencia_pct' in mapa_data.columns:
@@ -3688,6 +4254,13 @@ def generar_reporte_final(mapa_data, output_dir):
 
 
 def generar_mapa_nacional(mapa_data, output_dir):
+    """
+    Genera mapa nacional simple con leyenda de colores.
+
+    Args:
+        mapa_data (GeoDataFrame): Datos combinados de toda Chile.
+        output_dir (str): Directorio para guardar el mapa.
+    """
     if mapa_data.empty:
         print(" ⚠ No hay datos para generar mapa nacional")
         return
@@ -3696,14 +4269,17 @@ def generar_mapa_nacional(mapa_data, output_dir):
 
     fig, ax = plt.subplots(1, 1, figsize=(20, 12))
 
+    # Asignar colores
     if 'diferencia_pct' in mapa_data.columns:
         mapa_data['color'] = mapa_data['diferencia_pct'].apply(asignar_color_diferencia)
     else:
         mapa_data['color'] = '#D3D3D3'
 
+    # Dibujar mapa
     try:
         mapa_data.plot(ax=ax, color=mapa_data['color'], edgecolor='black', linewidth=0.3)
     except:
+        # Fallback: dibujar comunas individualmente
         for idx, row in mapa_data.iterrows():
             if hasattr(row, 'geometry') and row.geometry is not None:
                 try:
@@ -3711,10 +4287,11 @@ def generar_mapa_nacional(mapa_data, output_dir):
                 except:
                     continue
 
-    ax.set_title('ANÁLISIS SEGUNDA VUELTA PRESIDENCIAL CHILE 2025 - DIFERENCIA JARA vs KAST', fontsize=24,
+    ax.set_title('ANÁLISIS SEGUNDA VELTA PRESIDENCIAL CHILE 2025 - DIFERENCIA JARA vs KAST', fontsize=24,
                  fontweight='bold', pad=20)
     ax.set_axis_off()
 
+    # Leyenda de colores
     leyenda_elementos = [
         mpatches.Patch(color='#B91C1C', label='Jara +50% o más'),
         mpatches.Patch(color='#C92A2A', label='Jara +40% a +50%'),
@@ -3749,7 +4326,19 @@ def generar_mapa_nacional(mapa_data, output_dir):
     print(f"✓ Mapa nacional generado: {output_path}")
 
 
+# ============================================================================
+# FUNCIÓN PRINCIPAL
+# ============================================================================
+
 def main(csv_path, output_dir, regions=None):
+    """
+    Función principal del generador de mapas electorales.
+
+    Args:
+        csv_path (str): Ruta al archivo CSV con datos electorales.
+        output_dir (str): Directorio de salida para los mapas.
+        regions (list or None): Lista de regiones a procesar, o None para todas.
+    """
     print("\n" + "=" * 80)
     print("ANÁLISIS SEGUNDA VUELTA PRESIDENCIAL CHILE 2025 - JARA vs KAST")
     print("Incluye mapas de áreas metropolitanas: Gran Santiago, Gran Valparaíso, Gran Concepción")
@@ -3773,10 +4362,12 @@ def main(csv_path, output_dir, regions=None):
     os.makedirs(output_dir, exist_ok=True)
 
     try:
+        # Cargar y procesar datos
         comunas = cargar_datos_geograficos()
         df_electoral = procesar_csv(csv_path)
         mapa_data = unir_datos(comunas, df_electoral)
 
+        # Guardar datos combinados
         datos_path = os.path.join(output_dir, 'datos_combinados.csv')
         columnas_a_guardar = []
         for col in ['COD_COM', 'NOM_COM', 'REGION_NUM', 'geometry',
@@ -3799,6 +4390,7 @@ def main(csv_path, output_dir, regions=None):
         print("🎨 GENERANDO MAPAS REGIONALES")
         print("=" * 60)
 
+        # Generar mapas regionales
         if regions is None:
             regions = range(1, 17)
 
@@ -3815,6 +4407,7 @@ def main(csv_path, output_dir, regions=None):
         print("🏝️ GENERANDO MAPAS DE ISLAS SEPARADAS")
         print("=" * 60)
 
+        # Mapas de islas
         crear_mapa_isla_pascua(mapa_data, output_dir)
         crear_mapa_juan_fernandez(mapa_data, output_dir)
 
@@ -3822,12 +4415,14 @@ def main(csv_path, output_dir, regions=None):
         print("🗺️ GENERANDO NUEVO MAPA DE CHILE EN TRES PARTES")
         print("=" * 60)
 
+        # Mapa de Chile en tres partes
         crear_mapa_chile_tres_partes(mapa_data, output_dir)
 
         print("\n" + "=" * 60)
         print("🏙️ GENERANDO MAPAS DE ÁREAS METROPOLITANAS")
         print("=" * 60)
 
+        # Mapas de áreas metropolitanas
         if 5 in regions or regions is None:
             crear_mapa_gran_valparaiso(mapa_data, output_dir)
 
@@ -3850,6 +4445,7 @@ def main(csv_path, output_dir, regions=None):
 
         crear_tabla_capitales_regionales(mapa_data, output_dir)
 
+        # Reporte final
         generar_reporte_final(mapa_data, output_dir)
 
         print(f"\n" + "=" * 80)
@@ -3870,7 +4466,12 @@ def main(csv_path, output_dir, regions=None):
         traceback.print_exc()
 
 
+# ============================================================================
+# EJECUCIÓN PRINCIPAL
+# ============================================================================
+
 if __name__ == "__main__":
+    # Configurar argumentos de línea de comandos
     parser = argparse.ArgumentParser(description="Generador de mapas electorales")
     parser.add_argument('--csv', type=str,
                         default="/home/alfonso/PyCharmMiscProject/[OK ]Elecciones presidencial 2025/Segunda vuelta/mapas/matriz_elecciones_346_comunas.csv",
@@ -3882,9 +4483,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Procesar argumentos de regiones
     if args.regions and args.regions.lower() != 'all':
         regions = [int(r) for r in args.regions.split(',')]
     else:
         regions = None
 
+    # Ejecutar función principal
     main(args.csv, args.output, regions)
